@@ -6,9 +6,7 @@ interface AppLayoutProps {
 }
 
 const navItems = [
-  { label: 'Case List', href: '/cases' },
-  { label: 'Create Case', href: '/cases/new' },
-  { label: 'Preview / Generate', href: '/cases/CASE-2025-001/preview' }
+  { label: 'Case List', href: '/cases' }
 ];
 
 export default function AppLayout({ children }: AppLayoutProps) {
