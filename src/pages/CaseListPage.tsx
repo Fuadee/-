@@ -1,24 +1,17 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import { listCases } from '../lib/caseStore';
 
-const mockCases = [
-  {
-    id: 'CASE-2025-001',
-    title: 'จัดซื้อวัสดุสำนักงานประจำไตรมาส 1',
-    department: 'กองคลัง',
-    updatedAt: '11/02/2026 10:45',
-    status: 'draft'
-  },
-  {
-    id: 'CASE-2025-002',
-    title: 'จัดจ้างบำรุงรักษาเครื่องปรับอากาศ',
-    department: 'อาคารสถานที่',
-    updatedAt: '10/02/2026 15:20',
-    status: 'generated'
-  }
-];
+const formatDateTime = (value: string) =>
+  new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(new Date(value));
 
 export default function CaseListPage() {
+  const cases = useMemo(() => listCases(), []);
+
   return (
     <section>
       <PageHeader
@@ -31,39 +24,46 @@ export default function CaseListPage() {
         }
       />
 
-      <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Case No.</th>
-              <th>ชื่อเคส</th>
-              <th>หน่วยงาน</th>
-              <th>อัปเดตล่าสุด</th>
-              <th>สถานะ</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {mockCases.map((item) => (
-              <tr key={item.id}>
-                <td>{item.id}</td>
-                <td>{item.title}</td>
-                <td>{item.department}</td>
-                <td>{item.updatedAt}</td>
-                <td>
-                  <span className={`badge ${item.status}`}>{item.status}</span>
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <Link to={`/cases/${item.id}/edit`}>แก้ไข</Link>
-                    <Link to={`/cases/${item.id}/preview`}>Preview</Link>
-                  </div>
-                </td>
+      {cases.length === 0 ? (
+        <div className="card">
+          <h3>ยังไม่มีเคส</h3>
+          <p className="hint">เริ่มต้นสร้าง draft ใหม่เพื่อจัดการข้อมูลงานจัดซื้อจัดจ้าง</p>
+        </div>
+      ) : (
+        <div className="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Case No.</th>
+                <th>ชื่อเคส</th>
+                <th>หน่วยงาน</th>
+                <th>อัปเดตล่าสุด</th>
+                <th>สถานะ</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {cases.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.case_no}</td>
+                  <td>{item.title || '-'}</td>
+                  <td>{item.department || '-'}</td>
+                  <td>{formatDateTime(item.updated_at)}</td>
+                  <td>
+                    <span className={`badge ${item.status}`}>{item.status}</span>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <Link to={`/cases/${item.id}/edit`}>แก้ไข</Link>
+                      <Link to={`/cases/${item.id}/preview`}>Preview</Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
