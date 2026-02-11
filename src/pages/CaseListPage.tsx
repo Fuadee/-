@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
-import { listCases } from '../lib/caseStore';
+import { clearAllCases, deleteCases, listCases } from '../lib/caseStore';
 
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat('th-TH', {
@@ -10,7 +10,69 @@ const formatDateTime = (value: string) =>
   }).format(new Date(value));
 
 export default function CaseListPage() {
-  const cases = useMemo(() => listCases(), []);
+  const [cases, setCases] = useState(() => listCases());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCases(listCases());
+  }, []);
+
+  const allSelected = useMemo(
+    () => cases.length > 0 && cases.every((item) => selectedIds.has(item.id)),
+    [cases, selectedIds]
+  );
+
+  const selectedCount = selectedIds.size;
+
+  const onToggleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds(new Set());
+      return;
+    }
+
+    setSelectedIds(new Set(cases.map((item) => item.id)));
+  };
+
+  const onToggleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+
+      return next;
+    });
+  };
+
+  const refreshCases = () => {
+    setCases(listCases());
+    setSelectedIds(new Set());
+  };
+
+  const onDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+
+    const confirmed = window.confirm(`ยืนยันลบ ${selectedIds.size} เคสที่เลือก?`);
+    if (!confirmed) return;
+
+    deleteCases(Array.from(selectedIds));
+    refreshCases();
+  };
+
+  const onClearAllCases = () => {
+    if (cases.length === 0) return;
+
+    const token = window.prompt('พิมพ์ DELETE เพื่อยืนยันการล้างเคสทั้งหมด');
+    if (token !== 'DELETE') {
+      return;
+    }
+
+    clearAllCases();
+    refreshCases();
+  };
 
   return (
     <section>
@@ -31,9 +93,29 @@ export default function CaseListPage() {
         </div>
       ) : (
         <div className="card">
+          <div className="list-toolbar">
+            <span className="hint">เลือกแล้ว {selectedCount} เคส</span>
+            <div className="toolbar-actions">
+              <button type="button" className="btn-secondary" onClick={onDeleteSelected} disabled={selectedCount === 0}>
+                ลบที่เลือก
+              </button>
+              <button type="button" className="btn-danger" onClick={onClearAllCases}>
+                ล้างเคสทั้งหมด
+              </button>
+            </div>
+          </div>
+
           <table>
             <thead>
               <tr>
+                <th>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={(event) => onToggleSelectAll(event.target.checked)}
+                    aria-label="เลือกทั้งหมด"
+                  />
+                </th>
                 <th>Case No.</th>
                 <th>ชื่อเคส</th>
                 <th>หน่วยงาน</th>
@@ -45,6 +127,14 @@ export default function CaseListPage() {
             <tbody>
               {cases.map((item) => (
                 <tr key={item.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={(event) => onToggleSelect(item.id, event.target.checked)}
+                      aria-label={`เลือกเคส ${item.case_no}`}
+                    />
+                  </td>
                   <td>{item.case_no}</td>
                   <td>{item.title || '-'}</td>
                   <td>{item.department || '-'}</td>
