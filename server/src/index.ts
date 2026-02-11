@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Docxtemplater from 'docxtemplater';
@@ -38,21 +39,40 @@ interface TemplateDef {
 
 interface TemplatePartScan {
   part: string;
+  tags: Array<{
+    raw: string;
+    tag: string;
+    start_index: number;
+    end_index: number;
+    context: string;
+    split_across_text_nodes: boolean;
+  }>;
+  fullwidth_braces: Array<{
+    char: '｛' | '｝';
+    index: number;
+    context: string;
+  }>;
+  zero_width_chars: Array<{
+    char_code: string;
+    index: number;
+    context: string;
+  }>;
   brace_hits: Array<{
     token: '{' | '}' | '{{' | '}}';
     index: number;
-  }>;
-  tags: Array<{
-    value: string;
-    start_text_index: number;
-    end_text_index: number;
-    split_across_text_nodes: boolean;
   }>;
   issues: Array<{
     type: 'nested_open' | 'close_without_open' | 'unclosed_tag' | 'split_tag';
     message: string;
     text_index?: number;
   }>;
+}
+
+interface TemplateFileInfo {
+  path: string;
+  size: number;
+  mtime: string;
+  sha256: string;
 }
 
 const templates: TemplateDef[] = [
@@ -180,6 +200,27 @@ const parseDocxErrorDetails = (error: unknown) => {
   }));
 };
 
+const getTemplateFileInfo = (templatePath: string): TemplateFileInfo => {
+  const stat = statSync(templatePath);
+  const fileBuffer = readFileSync(templatePath);
+  const sha256 = createHash('sha256').update(fileBuffer).digest('hex');
+
+  return {
+    path: templatePath,
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+    sha256
+  };
+};
+
+const getContext = (text: string, start: number, end: number, radius = 40) => {
+  const from = Math.max(0, start - radius);
+  const to = Math.min(text.length, end + radius);
+  return text.slice(from, to);
+};
+
+const isZeroWidthChar = (char: string): boolean => /[\u200B\u200C\u200D\u2060\uFEFF]/u.test(char);
+
 const scanTemplatePartXml = (part: string, xml: string): TemplatePartScan => {
   const braceHits: TemplatePartScan['brace_hits'] = [];
   const bracePattern = /\{\{|\}\}|\{|\}/g;
@@ -203,7 +244,60 @@ const scanTemplatePartXml = (part: string, xml: string): TemplatePartScan => {
     );
   }
 
-  const tags: TemplatePartScan['tags'] = [];
+  const flatText = textNodes.join('');
+  const nodeEndIndexes: number[] = [];
+  let currentLength = 0;
+  textNodes.forEach((text) => {
+    currentLength += text.length;
+    nodeEndIndexes.push(currentLength);
+  });
+
+  const inferSplitAcrossNodes = (startIndex: number, endIndex: number): boolean => {
+    return nodeEndIndexes.some((nodeEnd) => nodeEnd > startIndex && nodeEnd <= endIndex);
+  };
+
+  const scannedTags: TemplatePartScan['tags'] = [];
+  const singleBraceTagPattern = /\{([^{}]+)\}/g;
+  for (const match of flatText.matchAll(singleBraceTagPattern)) {
+    const raw = match[0] || '';
+    const tag = (match[1] || '').trim();
+    const start = match.index ?? 0;
+    const end = start + raw.length;
+    scannedTags.push({
+      raw,
+      tag,
+      start_index: start,
+      end_index: end,
+      context: getContext(flatText, start, end),
+      split_across_text_nodes: inferSplitAcrossNodes(start, end)
+    });
+  }
+
+  const fullwidthBraces: TemplatePartScan['fullwidth_braces'] = [];
+  const fullwidthPattern = /[｛｝]/g;
+  for (const match of flatText.matchAll(fullwidthPattern)) {
+    const char = match[0] as '｛' | '｝';
+    const index = match.index ?? 0;
+    fullwidthBraces.push({
+      char,
+      index,
+      context: getContext(flatText, index, index + 1)
+    });
+  }
+
+  const zeroWidthChars: TemplatePartScan['zero_width_chars'] = [];
+  for (const [index, char] of Array.from(flatText).entries()) {
+    if (!isZeroWidthChar(char)) {
+      continue;
+    }
+
+    zeroWidthChars.push({
+      char_code: `U+${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`,
+      index,
+      context: getContext(flatText, index, index + 1)
+    });
+  }
+
   const issues: TemplatePartScan['issues'] = [];
   let insideTag = false;
   let openTextIndex = -1;
@@ -236,13 +330,6 @@ const scanTemplatePartXml = (part: string, xml: string): TemplatePartScan => {
         }
 
         currentTag += '}';
-        tags.push({
-          value: currentTag,
-          start_text_index: openTextIndex,
-          end_text_index: textIndex,
-          split_across_text_nodes: openTextIndex !== textIndex
-        });
-
         if (openTextIndex !== textIndex) {
           issues.push({
             type: 'split_tag',
@@ -273,8 +360,10 @@ const scanTemplatePartXml = (part: string, xml: string): TemplatePartScan => {
 
   return {
     part,
+    tags: scannedTags,
+    fullwidth_braces: fullwidthBraces,
+    zero_width_chars: zeroWidthChars,
     brace_hits: braceHits,
-    tags,
     issues
   };
 };
@@ -296,6 +385,85 @@ const scanTemplateDocx = (templatePath: string): { parts: TemplatePartScan[]; ha
     parts,
     has_issues: parts.some((part) => part.issues.length > 0)
   };
+};
+
+const isControlTag = (tag: string) => tag.startsWith('#') || tag.startsWith('/') || tag.startsWith('^') || tag === '.';
+
+const resolvePath = (source: unknown, rawPath: string) => {
+  const pathParts = rawPath.split('.').filter(Boolean);
+  let current: unknown = source;
+
+  for (const part of pathParts) {
+    if (!current || typeof current !== 'object' || !(part in (current as Record<string, unknown>))) {
+      return { found: false, missing_at: part };
+    }
+
+    current = (current as Record<string, unknown>)[part];
+  }
+
+  return { found: true, value: current };
+};
+
+const buildTagResolution = (parts: TemplatePartScan[], renderData: Record<string, unknown>) => {
+  const uniqueTags = Array.from(new Set(parts.flatMap((part) => part.tags.map((tag) => tag.tag))));
+
+  return uniqueTags.map((tag) => {
+    if (isControlTag(tag)) {
+      return {
+        tag,
+        found: true,
+        source: 'control_tag',
+        note: 'Tag ควบคุม loop/section ของ docxtemplater'
+      };
+    }
+
+    const rootResolution = resolvePath(renderData, tag);
+    if (rootResolution.found) {
+      return {
+        tag,
+        found: true,
+        source: 'root',
+        value_preview: toPreviewObject(rootResolution.value)
+      };
+    }
+
+    const items = Array.isArray(renderData.items) ? renderData.items : [];
+    if (tag && !tag.includes('.') && items.length > 0 && typeof items[0] === 'object' && items[0] !== null) {
+      const loopResolution = resolvePath(items[0], tag);
+      if (loopResolution.found) {
+        return {
+          tag,
+          found: true,
+          source: 'items_loop',
+          value_preview: toPreviewObject(loopResolution.value)
+        };
+      }
+    }
+
+    return {
+      tag,
+      found: false,
+      source: 'missing',
+      missing_at: rootResolution.missing_at,
+      recommendation: 'ตรวจ key ใน payload ให้ตรงกับ tag หรือแก้ tag ใน Word ให้ตรงกับ render data'
+    };
+  });
+};
+
+const getTemplateOr404 = (templateCode: string, res: express.Response) => {
+  const templateDef = templates.find((template) => template.template_code === templateCode);
+  if (!templateDef) {
+    res.status(404).json({ message: `Template not found: ${templateCode}` });
+    return null;
+  }
+
+  const templatePath = path.join(templatesDir, templateDef.filename);
+  if (!existsSync(templatePath)) {
+    res.status(404).json({ message: `Template file not found at ${templatePath}` });
+    return null;
+  }
+
+  return { templateDef, templatePath };
 };
 
 const baseTemplateParts = {
@@ -414,24 +582,54 @@ app.get('/api/debug/payload-shape', (_req, res) => {
 
 app.get('/api/debug/template-scan', (req, res) => {
   const templateCode = String(req.query.template_code || 'basic_v1');
-  const templateDef = templates.find((template) => template.template_code === templateCode);
-
-  if (!templateDef) {
-    return res.status(404).json({ message: `Template not found: ${templateCode}` });
+  const templateBundle = getTemplateOr404(templateCode, res);
+  if (!templateBundle) {
+    return;
   }
 
-  const templatePath = path.join(templatesDir, templateDef.filename);
-
-  if (!existsSync(templatePath)) {
-    return res.status(404).json({ message: `Template file not found at ${templatePath}` });
-  }
-
-  const report = scanTemplateDocx(templatePath);
+  const report = scanTemplateDocx(templateBundle.templatePath);
   return res.json({
     template_code: templateCode,
-    filename: templateDef.filename,
+    filename: templateBundle.templateDef.filename,
     has_issues: report.has_issues,
     parts: report.parts
+  });
+});
+
+app.get('/api/debug/template-info', (req, res) => {
+  const templateCode = String(req.query.template_code || 'basic_v1');
+  const templateBundle = getTemplateOr404(templateCode, res);
+  if (!templateBundle) {
+    return;
+  }
+
+  return res.json(getTemplateFileInfo(templateBundle.templatePath));
+});
+
+app.get('/api/debug/template-tags', (req, res) => {
+  const templateCode = String(req.query.template_code || 'basic_v1');
+  const templateBundle = getTemplateOr404(templateCode, res);
+  if (!templateBundle) {
+    return;
+  }
+
+  const report = scanTemplateDocx(templateBundle.templatePath);
+  const uniqueTags = Array.from(new Set(report.parts.flatMap((part) => part.tags.map((tag) => tag.tag))));
+  const braceDiagnostics = {
+    has_fullwidth_braces: report.parts.some((part) => part.fullwidth_braces.length > 0),
+    has_zero_width_chars: report.parts.some((part) => part.zero_width_chars.length > 0),
+    recommendations: [
+      'ใช้วงเล็บปีกกา ASCII เท่านั้น: { และ } (0x7B/0x7D)',
+      'ถ้าสงสัยว่ามีอักขระแฝง ให้พิมพ์ tag ใน Notepad แล้วคัดลอกแบบ Keep Text Only ลง Word'
+    ]
+  };
+
+  return res.json({
+    template_code: templateCode,
+    delimiter: 'single_brace',
+    tags: uniqueTags,
+    parts: report.parts,
+    brace_diagnostics: braceDiagnostics
   });
 });
 
@@ -499,6 +697,14 @@ app.post('/api/generate-docx', (req, res) => {
   }
 
   try {
+    const templateInfo = getTemplateFileInfo(templatePath);
+    console.log('[generate-docx] template_absolute_path:', templateInfo.path);
+    console.log('[generate-docx] template_stat:', {
+      size: templateInfo.size,
+      mtime: templateInfo.mtime
+    });
+    console.log('[generate-docx] template_sha256:', templateInfo.sha256);
+
     const binary = readFileSync(templatePath, 'binary');
     const zip = new PizZip(binary);
     const doc = new Docxtemplater(zip, {
@@ -508,6 +714,8 @@ app.post('/api/generate-docx', (req, res) => {
     });
 
     const renderData = createRenderData(body);
+    const templateReport = scanTemplateDocx(templatePath);
+    const tagResolution = buildTagResolution(templateReport.parts, renderData);
 
     doc.render(renderData);
 
@@ -523,6 +731,10 @@ app.post('/api/generate-docx', (req, res) => {
         items_keys: payloadShape.items_keys,
         attachments_summary_type: payloadShape.attachments_summary_type,
         note: 'ใช้ keys เหล่านี้ไปทำ placeholder ในไฟล์ word',
+        template_info: templateInfo,
+        template_tags: Array.from(new Set(templateReport.parts.flatMap((part) => part.tags.map((tag) => tag.tag)))),
+        tag_resolution: tagResolution,
+        delimiter: 'single_brace',
         ...buildRenderContextDebug(renderData)
       });
     }
