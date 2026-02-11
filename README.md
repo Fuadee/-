@@ -72,3 +72,26 @@ Response:
 - `/cases/new` : Create Case
 - `/cases/:id/edit` : Edit Case
 - `/cases/:id/preview` : Preview / Generate (โหลด template + เรียก generate docx)
+
+## Template placeholders
+ใส่ placeholder ต่อไปนี้ใน `templates/template.docx`:
+
+```text
+{{department}}
+{{subject}}
+{{subject_detail}}
+{{purpose}}
+{{budget_amount}}
+{{budget_source}}
+{{assignee}}
+```
+
+สำหรับรายการวัสดุแบบวนซ้ำ (`items`) ให้ใส่:
+
+```text
+{#items}
+- {{name}} จำนวน {{qty}} {{unit}} ราคา {{price}} รวม {{total}}
+{/items}
+```
+
+> หมายเหตุ: ไม่ต้องสร้างไฟล์ template อัตโนมัติ ให้สร้างและจัดรูปแบบใน Word ด้วย placeholder ตามด้านบน
