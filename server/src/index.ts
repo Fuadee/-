@@ -10,7 +10,15 @@ interface GenerateDocxBody {
   template_code: string;
   case: Record<string, unknown>;
   items: Array<Record<string, unknown>>;
-  attachments_summary: string;
+  attachments_summary: unknown;
+}
+
+interface PayloadShape {
+  template_code: string;
+  case_keys: string[];
+  items_keys: string[];
+  attachments_summary_type: string;
+  example_placeholders: string[];
 }
 
 interface TemplateDef {
@@ -30,6 +38,64 @@ const templates: TemplateDef[] = [
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const templatesDir = path.resolve(__dirname, '../templates');
+
+const getObjectKeys = (value: unknown): string[] => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.keys(value as Record<string, unknown>);
+};
+
+const getPayloadShape = (body: Partial<GenerateDocxBody> = {}): PayloadShape => {
+  const case_keys = getObjectKeys(body.case);
+  const firstItem = Array.isArray(body.items) ? body.items[0] : undefined;
+  const items_keys = getObjectKeys(firstItem);
+
+  return {
+    template_code: body.template_code || 'basic_v1',
+    case_keys,
+    items_keys,
+    attachments_summary_type:
+      body.attachments_summary === null ? 'null' : typeof body.attachments_summary,
+    example_placeholders: [
+      ...case_keys.map((key) => `{{case.${key}}}`),
+      ...items_keys.map((key) => `{{items[0].${key}}}`),
+      '{#items}...{/items}'
+    ]
+  };
+};
+
+const parseDocxErrorDetails = (error: unknown) => {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const typedError = error as {
+    properties?: {
+      id?: string;
+      errors?: Array<{
+        properties?: {
+          id?: string;
+          explanation?: string;
+          context?: string;
+          xtag?: string;
+        };
+      }>;
+    };
+  };
+
+  if (typedError.properties?.id !== 'multi_error' || !Array.isArray(typedError.properties.errors)) {
+    return undefined;
+  }
+
+  return typedError.properties.errors.map((multiErr) => ({
+    id: multiErr.properties?.id || 'unknown',
+    explanation: multiErr.properties?.explanation || 'No explanation',
+    context: multiErr.properties?.context,
+    xtag: multiErr.properties?.xtag
+  }));
+};
 
 const baseTemplateParts = {
   contentTypes: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -120,8 +186,39 @@ app.get('/api/templates', (_req, res) => {
   return res.json(availableTemplates);
 });
 
+app.get('/api/debug/payload-shape', (_req, res) => {
+  const expectedBody: Partial<GenerateDocxBody> = {
+    template_code: 'basic_v1',
+    case: {
+      case_no: 'PR-2025-001',
+      title: 'Procurement title',
+      department: 'IT',
+      requester: 'Requester name',
+      vendor: 'Vendor name',
+      request_date: '2025-02-11'
+    },
+    items: [
+      {
+        description: 'Sample item',
+        quantity: 1,
+        unit: 'pcs',
+        unit_price: 1000
+      }
+    ],
+    attachments_summary: 'ไฟล์แนบ 2 รายการ'
+  };
+
+  return res.json(getPayloadShape(expectedBody));
+});
+
 app.post('/api/generate-docx', (req, res) => {
   const body = req.body as GenerateDocxBody;
+  const debugEnabled = req.query.debug === '1';
+  const payloadShape = getPayloadShape(body);
+
+  console.log('[generate-docx] case_keys:', payloadShape.case_keys);
+  console.log('[generate-docx] items_keys:', payloadShape.items_keys);
+  console.log('[generate-docx] attachments_summary_type:', payloadShape.attachments_summary_type);
 
   if (!body || !body.template_code || !body.case || !Array.isArray(body.items)) {
     return res.status(400).json({ message: 'Invalid request body' });
@@ -160,6 +257,16 @@ app.post('/api/generate-docx', (req, res) => {
       compression: 'DEFLATE'
     });
 
+    if (debugEnabled) {
+      return res.json({
+        ok: true,
+        case_keys: payloadShape.case_keys,
+        items_keys: payloadShape.items_keys,
+        attachments_summary_type: payloadShape.attachments_summary_type,
+        note: 'ใช้ keys เหล่านี้ไปทำ placeholder ในไฟล์ word'
+      });
+    }
+
     const downloadName = `${String((body.case as Record<string, unknown>).case_no || 'procurement')}_${templateDef.template_code}.docx`;
 
     res.setHeader(
@@ -170,6 +277,23 @@ app.post('/api/generate-docx', (req, res) => {
     return res.send(output);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
+    const multiErrorDetails = parseDocxErrorDetails(error);
+
+    if (multiErrorDetails) {
+      console.error('[generate-docx] docxtemplater multi_error details:', multiErrorDetails);
+    }
+
+    if (debugEnabled) {
+      return res.status(500).json({
+        ok: false,
+        message: `Failed to generate DOCX: ${message}`,
+        case_keys: payloadShape.case_keys,
+        items_keys: payloadShape.items_keys,
+        attachments_summary_type: payloadShape.attachments_summary_type,
+        docxtemplater_errors: multiErrorDetails
+      });
+    }
+
     return res.status(500).json({ message: `Failed to generate DOCX: ${message}` });
   }
 });
