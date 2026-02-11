@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
-import { apiUrl } from '../lib/api';
+import { apiUrl, getApiBaseUrl } from '../lib/api';
 import { getCase } from '../lib/caseStore';
 
 interface TemplateSummary {
   template_code: string;
   name: string;
 }
+
+const toFriendlyApiError = (error: unknown, endpoint: string) => {
+  const fallback = `เรียก ${endpoint} ไม่ได้`;
+
+  if (error instanceof TypeError) {
+    return `backend ไม่ตอบสนอง: ${fallback} (ตรวจ API base URL: ${getApiBaseUrl()} และ backend ว่ากำลังรันอยู่)`;
+  }
+
+  if (error instanceof Error) {
+    return `${fallback}: ${error.message}`;
+  }
+
+  return fallback;
+};
 
 export default function PreviewGeneratePage() {
   const params = useParams();
@@ -45,8 +59,7 @@ export default function PreviewGeneratePage() {
         }
       } catch (error) {
         if (isMounted) {
-          const message = error instanceof Error ? error.message : 'โหลด template ไม่สำเร็จ';
-          setErrorMessage(message);
+          setErrorMessage(toFriendlyApiError(error, '/api/templates'));
         }
       } finally {
         if (isMounted) {
@@ -124,8 +137,7 @@ export default function PreviewGeneratePage() {
       link.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'สร้างไฟล์ .docx ไม่สำเร็จ';
-      setErrorMessage(message);
+      setErrorMessage(toFriendlyApiError(error, '/api/generate-docx'));
     } finally {
       setGenerating(false);
     }

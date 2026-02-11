@@ -52,19 +52,41 @@ const parseCases = (): Case[] => {
   }
 };
 
+const dedupeCasesById = (cases: Case[]): Case[] => {
+  const latestById = new Map<string, Case>();
+
+  for (const item of cases) {
+    const existing = latestById.get(item.id);
+
+    if (!existing) {
+      latestById.set(item.id, item);
+      continue;
+    }
+
+    const existingUpdatedAt = new Date(existing.updated_at).getTime();
+    const itemUpdatedAt = new Date(item.updated_at).getTime();
+
+    if (itemUpdatedAt >= existingUpdatedAt) {
+      latestById.set(item.id, item);
+    }
+  }
+
+  return Array.from(latestById.values());
+};
+
 const writeCases = (cases: Case[]) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cases));
 };
 
 export function listCases(): Case[] {
-  return parseCases().sort(
+  return dedupeCasesById(parseCases()).sort(
     (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   );
 }
 
 export function getCase(id: string): Case | null {
-  const found = parseCases().find((item) => item.id === id);
+  const found = dedupeCasesById(parseCases()).find((item) => item.id === id);
   return found ?? null;
 }
 
@@ -74,14 +96,14 @@ export function createCase(initial?: Partial<Case>): Case {
     ...initial
   } satisfies Case;
 
-  const cases = parseCases();
+  const cases = dedupeCasesById(parseCases());
   cases.unshift(draft);
   writeCases(cases);
   return draft;
 }
 
 export function saveCase(c: Case): Case {
-  const cases = parseCases();
+  const cases = dedupeCasesById(parseCases());
   const payload: Case = {
     ...c,
     updated_at: nowIso()
@@ -113,6 +135,17 @@ export function updateCase(id: string, patch: Partial<Case>): Case {
 }
 
 export function deleteCase(id: string): void {
-  const nextCases = parseCases().filter((item) => item.id !== id);
+  const nextCases = dedupeCasesById(parseCases()).filter((item) => item.id !== id);
   writeCases(nextCases);
+}
+
+export function deleteCases(ids: string[]): void {
+  const targets = new Set(ids);
+  const nextCases = dedupeCasesById(parseCases()).filter((item) => !targets.has(item.id));
+  writeCases(nextCases);
+}
+
+export function clearAllCases(): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(STORAGE_KEY);
 }

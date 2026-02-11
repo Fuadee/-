@@ -89,16 +89,35 @@ const ensureSampleTemplateExists = (templatePath: string) => {
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
 for (const templateDef of templates) {
   ensureSampleTemplateExists(path.join(templatesDir, templateDef.filename));
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [frontendOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173']
+  })
+);
 app.use(express.json({ limit: '1mb' }));
 
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true, port, templatesDir });
+});
+
 app.get('/api/templates', (_req, res) => {
-  res.json(templates.map(({ template_code, name }) => ({ template_code, name })));
+  const availableTemplates = templates
+    .map(({ template_code, name, filename }) => ({
+      template_code,
+      name,
+      filename,
+      exists: existsSync(path.join(templatesDir, filename))
+    }))
+    .filter((item) => item.exists)
+    .map(({ template_code, name }) => ({ template_code, name }));
+
+  return res.json(availableTemplates);
 });
 
 app.post('/api/generate-docx', (req, res) => {
@@ -115,6 +134,12 @@ app.post('/api/generate-docx', (req, res) => {
   }
 
   const templatePath = path.join(templatesDir, templateDef.filename);
+
+  if (!existsSync(templatePath)) {
+    return res.status(404).json({
+      message: `Template file not found at ${templatePath}`
+    });
+  }
 
   try {
     const binary = readFileSync(templatePath, 'binary');
@@ -151,4 +176,6 @@ app.post('/api/generate-docx', (req, res) => {
 
 app.listen(port, () => {
   console.log(`DOCX backend running on http://localhost:${port}`);
+  console.log(`CORS origin: ${frontendOrigin}`);
+  console.log(`Templates dir: ${templatesDir}`);
 });
