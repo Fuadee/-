@@ -21,6 +21,15 @@ interface PayloadShape {
   example_placeholders: string[];
 }
 
+interface RenderContextDebug {
+  render_context_keys: string[];
+  render_context_preview: Record<string, unknown>;
+  recommended_placeholders: {
+    minimal: string[];
+    with_items_loop: string[];
+  };
+}
+
 interface TemplateDef {
   template_code: string;
   name: string;
@@ -84,6 +93,61 @@ const getPayloadShape = (body: Partial<GenerateDocxBody> = {}): PayloadShape => 
     ]
   };
 };
+
+const createRenderData = (body: Partial<GenerateDocxBody> = {}): Record<string, unknown> => ({
+  case: body.case ?? {},
+  items: Array.isArray(body.items) ? body.items : [],
+  attachments_summary: body.attachments_summary ?? null
+});
+
+const toPreviewObject = (value: unknown, maxEntries = 6): unknown => {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return [];
+    }
+
+    return [toPreviewObject(value[0], maxEntries)];
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, maxEntries);
+  return Object.fromEntries(entries.map(([key, entryValue]) => [key, toPreviewObject(entryValue, maxEntries)]));
+};
+
+const buildRecommendedPlaceholders = (renderData: Record<string, unknown>): RenderContextDebug['recommended_placeholders'] => {
+  const caseObj = renderData.case;
+  const caseKeys = getObjectKeys(caseObj).slice(0, 6);
+  const itemObj = Array.isArray(renderData.items) ? renderData.items[0] : undefined;
+  const itemKeys = getObjectKeys(itemObj).slice(0, 4);
+
+  const minimalFromCase = caseKeys.map((key) => `{case.${key}}`);
+  const minimal = [
+    ...minimalFromCase,
+    '{attachments_summary}'
+  ].slice(0, 8);
+
+  const withItemsLoop = [
+    ...minimalFromCase,
+    '{attachments_summary}',
+    '{#items}',
+    ...itemKeys.map((key) => `{${key}}`),
+    '{/items}'
+  ];
+
+  return {
+    minimal,
+    with_items_loop: withItemsLoop
+  };
+};
+
+const buildRenderContextDebug = (renderData: Record<string, unknown>): RenderContextDebug => ({
+  render_context_keys: Object.keys(renderData),
+  render_context_preview: toPreviewObject(renderData) as Record<string, unknown>,
+  recommended_placeholders: buildRecommendedPlaceholders(renderData)
+});
 
 const parseDocxErrorDetails = (error: unknown) => {
   if (!error || typeof error !== 'object') {
@@ -371,6 +435,42 @@ app.get('/api/debug/template-scan', (req, res) => {
   });
 });
 
+app.get('/api/debug/render-context', (req, res) => {
+  const templateCode = String(req.query.template_code || 'basic_v1');
+  const templateDef = templates.find((template) => template.template_code === templateCode);
+
+  if (!templateDef) {
+    return res.status(404).json({ message: `Template not found: ${templateCode}` });
+  }
+
+  const sampleBody: Partial<GenerateDocxBody> = {
+    template_code: templateCode,
+    case: {
+      case_no: 'PR-2025-001',
+      title: 'Procurement title',
+      department: 'IT',
+      requester: 'Requester name',
+      vendor: 'Vendor name',
+      request_date: '2025-02-11'
+    },
+    items: [
+      {
+        description: 'Sample item',
+        quantity: 1,
+        unit: 'pcs',
+        unit_price: 1000
+      }
+    ],
+    attachments_summary: 'ไฟล์แนบ 2 รายการ'
+  };
+
+  const renderData = createRenderData(sampleBody);
+  return res.json({
+    template_code: templateCode,
+    ...buildRenderContextDebug(renderData)
+  });
+});
+
 app.post('/api/generate-docx', (req, res) => {
   const body = req.body as GenerateDocxBody;
   const debugEnabled = req.query.debug === '1';
@@ -407,11 +507,9 @@ app.post('/api/generate-docx', (req, res) => {
       nullGetter: () => '-'
     });
 
-    doc.render({
-      case: body.case,
-      items: body.items,
-      attachments_summary: body.attachments_summary
-    });
+    const renderData = createRenderData(body);
+
+    doc.render(renderData);
 
     const output = doc.getZip().generate({
       type: 'nodebuffer',
@@ -424,7 +522,8 @@ app.post('/api/generate-docx', (req, res) => {
         case_keys: payloadShape.case_keys,
         items_keys: payloadShape.items_keys,
         attachments_summary_type: payloadShape.attachments_summary_type,
-        note: 'ใช้ keys เหล่านี้ไปทำ placeholder ในไฟล์ word'
+        note: 'ใช้ keys เหล่านี้ไปทำ placeholder ในไฟล์ word',
+        ...buildRenderContextDebug(renderData)
       });
     }
 
@@ -445,13 +544,15 @@ app.post('/api/generate-docx', (req, res) => {
     }
 
     if (debugEnabled) {
+      const renderData = createRenderData(body);
       return res.status(500).json({
         ok: false,
         message: `Failed to generate DOCX: ${message}`,
         case_keys: payloadShape.case_keys,
         items_keys: payloadShape.items_keys,
         attachments_summary_type: payloadShape.attachments_summary_type,
-        docxtemplater_errors: multiErrorDetails
+        docxtemplater_errors: multiErrorDetails,
+        ...buildRenderContextDebug(renderData)
       });
     }
 
