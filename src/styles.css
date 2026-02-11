@@ -1,0 +1,125 @@
+:root {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #1f2937;
+  background: #f5f7fb;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+a { color: inherit; }
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1.2rem;
+}
+
+.sidebar h1 {
+  font-size: 1rem;
+  margin: 0 0 1rem;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sidebar a {
+  text-decoration: none;
+  padding: 0.6rem;
+  border-radius: 8px;
+  color: #cbd5e1;
+}
+
+.sidebar a.active,
+.sidebar a:hover { background: #1e293b; color: white; }
+
+.content { padding: 1.5rem; }
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.page-header h2 { margin: 0; }
+.page-header p { margin: 0.2rem 0 0; color: #475569; }
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e2e8f0;
+}
+
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #e2e8f0; padding: 0.75rem; text-align: left; vertical-align: top; }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; }
+input, select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+}
+
+.btn-primary,
+.btn-secondary,
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.btn-primary { background: #2563eb; color: white; }
+.btn-secondary { background: #e2e8f0; color: #1e293b; }
+
+.badge {
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+.badge.draft { background: #fef3c7; color: #92400e; }
+.badge.generated { background: #dcfce7; color: #166534; }
+
+.row-actions {
+  display: flex;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+  color: #2563eb;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 1rem;
+}
+
+.hint { color: #64748b; font-size: 0.85rem; margin-bottom: 0; }
