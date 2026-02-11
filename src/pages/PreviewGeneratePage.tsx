@@ -9,6 +9,20 @@ interface TemplateSummary {
   name: string;
 }
 
+interface DocxtemplaterErrorDetail {
+  id?: string;
+  explanation?: string;
+  xtag?: string;
+  context?: string;
+}
+
+interface DebugGenerateResponse {
+  ok?: boolean;
+  message?: string;
+  docxtemplater_errors?: DocxtemplaterErrorDetail[];
+  [key: string]: unknown;
+}
+
 const toFriendlyApiError = (error: unknown, endpoint: string) => {
   const fallback = `เรียก ${endpoint} ไม่ได้`;
 
@@ -33,6 +47,8 @@ export default function PreviewGeneratePage() {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [debugResult, setDebugResult] = useState<DebugGenerateResponse | null>(null);
+  const [debugGenerating, setDebugGenerating] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,6 +119,7 @@ export default function PreviewGeneratePage() {
 
     setGenerating(true);
     setErrorMessage('');
+    setDebugResult(null);
 
     try {
       const response = await fetch(apiUrl('/api/generate-docx'), {
@@ -140,6 +157,51 @@ export default function PreviewGeneratePage() {
       setErrorMessage(toFriendlyApiError(error, '/api/generate-docx'));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const onDebugGenerateDocx = async () => {
+    if (!selectedTemplateCode) {
+      setErrorMessage('กรุณาเลือก template');
+      return;
+    }
+
+    setDebugGenerating(true);
+    setErrorMessage('');
+
+    try {
+      const response = await fetch(apiUrl('/api/generate-docx?debug=1'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          template_code: selectedTemplateCode,
+          case: data,
+          items: data.items,
+          attachments_summary: attachmentsSummary
+        })
+      });
+
+      const payload = (await response.json().catch(() => null)) as DebugGenerateResponse | null;
+
+      if (!response.ok) {
+        setDebugResult(
+          payload || {
+            ok: false,
+            message: `Debug generate ล้มเหลว (HTTP ${response.status})`
+          }
+        );
+
+        return;
+      }
+
+      setDebugResult(payload || { ok: true, message: 'No debug payload returned' });
+    } catch (error) {
+      setErrorMessage(toFriendlyApiError(error, '/api/generate-docx?debug=1'));
+      setDebugResult(null);
+    } finally {
+      setDebugGenerating(false);
     }
   };
 
@@ -245,6 +307,28 @@ export default function PreviewGeneratePage() {
         )}
 
         {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+
+        {debugResult ? (
+          <div className="debug-output">
+            <h4>Debug response</h4>
+            <pre>{JSON.stringify(debugResult, null, 2)}</pre>
+
+            {Array.isArray(debugResult.docxtemplater_errors) &&
+            debugResult.docxtemplater_errors.length > 0 ? (
+              <div>
+                <p className="debug-errors-title">docxtemplater_errors</p>
+                <ul className="debug-errors-list">
+                  {debugResult.docxtemplater_errors.map((item, index) => (
+                    <li key={`${item.id || 'unknown'}-${index}`}>
+                      id: {item.id || '-'} | explanation: {item.explanation || '-'} | xtag/context:{' '}
+                      {item.xtag || item.context || '-'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="footer-actions">
@@ -252,9 +336,19 @@ export default function PreviewGeneratePage() {
           กลับไปแก้ไข
         </Link>
         <button
+          className="btn-secondary"
+          type="button"
+          disabled={
+            debugGenerating || generating || loadingTemplates || templates.length === 0
+          }
+          onClick={onDebugGenerateDocx}
+        >
+          {debugGenerating ? 'Debugging...' : 'Debug Generate'}
+        </button>
+        <button
           className="btn-primary"
           type="button"
-          disabled={generating || loadingTemplates || templates.length === 0}
+          disabled={generating || debugGenerating || loadingTemplates || templates.length === 0}
           onClick={onGenerateDocx}
         >
           {generating ? 'Generating...' : 'Generate .docx'}
