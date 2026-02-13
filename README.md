@@ -95,3 +95,19 @@ Response:
 ```
 
 > หมายเหตุ: ไม่ต้องสร้างไฟล์ template อัตโนมัติ ให้สร้างและจัดรูปแบบใน Word ด้วย placeholder ตามด้านบน
+
+## OpenAI (Gen Spec)
+
+ฟีเจอร์ `Gen Spec` ใช้ OpenAI Responses API ผ่าน route `POST /api/items/gen-spec`
+
+ตั้งค่า environment variable ก่อนรัน:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
+```
+
+ตัวอย่างทดสอบ route (ต้องรัน `npm run dev` ก่อน):
+
+```bash
+npm run test:gen-spec
+```
