@@ -1,0 +1,26 @@
+{
+  "department": "IT",
+  "subject": "three items",
+  "items": [
+    {
+      "name": "Notebook",
+      "qty": "1",
+      "unit": "pcs",
+      "price": "50",
+      "spec": "A5"
+    },
+    {
+      "name": "Pen",
+      "qty": "3",
+      "unit": "pcs",
+      "price": "10"
+    },
+    {
+      "name": "Folder",
+      "qty": "2",
+      "unit": "pcs",
+      "price": "20",
+      "spec": "Blue\nPlastic"
+    }
+  ]
+}
