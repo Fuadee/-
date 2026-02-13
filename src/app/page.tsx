@@ -552,48 +552,52 @@ export default function HomePage() {
                 + เพิ่มรายการ
               </button>
             </section>
-          </div>
 
-          <aside className={styles.sidebar}>
-            <div className={styles.stickyCard}>
+            <section className={`${styles.card} ${styles.summaryBottomCard}`}>
               <h3 className={styles.summaryTitle}>สรุปยอด</h3>
-              <dl className={styles.summaryList}>
-                <div className={styles.summaryRow}>
-                  <dt className={styles.summaryLabel}>ราคาสินค้า (ก่อน VAT)</dt>
-                  <dd className={styles.summaryValue}>{formatMoney(subtotalNet)}</dd>
+              <div className={styles.summaryBottomGrid}>
+                <div className={styles.summaryBottom}>
+                  <dl className={styles.summaryList}>
+                    <div className={styles.summaryRow}>
+                      <dt className={styles.summaryLabel}>ราคาสินค้า (ก่อน VAT)</dt>
+                      <dd className={styles.summaryValue}>{formatMoney(subtotalNet)}</dd>
+                    </div>
+                    <div className={styles.summaryRow}>
+                      <dt className={styles.summaryLabel}>VAT 7%</dt>
+                      <dd className={styles.summaryValue}>{formatMoney(vatAmount)}</dd>
+                    </div>
+                    <div className={`${styles.summaryRow} ${styles.totalRow}`}>
+                      <dt className={styles.summaryLabel}>รวมสุทธิ</dt>
+                      <dd className={`${styles.summaryValue} ${styles.grandTotalValue}`}>{formatMoney(grandTotal)}</dd>
+                    </div>
+                  </dl>
+                  <p className={styles.totalText}>{readThaiBaht(grandTotal)}</p>
                 </div>
-                <div className={styles.summaryRow}>
-                  <dt className={styles.summaryLabel}>VAT 7%</dt>
-                  <dd className={styles.summaryValue}>{formatMoney(vatAmount)}</dd>
-                </div>
-                <div className={`${styles.summaryRow} ${styles.totalRow}`}>
-                  <dt className={styles.summaryLabel}>รวมสุทธิ</dt>
-                  <dd className={`${styles.summaryValue} ${styles.grandTotalValue}`}>{formatMoney(grandTotal)}</dd>
-                </div>
-              </dl>
-              <p className={styles.totalText}>{readThaiBaht(grandTotal)}</p>
 
-              <label className={styles.toggleRow}>
-                <span>VAT included mode</span>
-                <input type="checkbox" checked={vatIncluded} readOnly aria-label="VAT included mode" />
-              </label>
+                <div className={styles.summaryActions}>
+                  <label className={styles.toggleRow}>
+                    <span>VAT included mode</span>
+                    <input type="checkbox" checked={vatIncluded} readOnly aria-label="VAT included mode" />
+                  </label>
 
-              <button type="submit" className={styles.primaryButton} disabled={loading}>
-                {loading ? (
-                  <span className={styles.spinnerWrap}>
-                    <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
-                  </span>
-                ) : (
-                  "Generate DOCX"
-                )}
-              </button>
-              <button type="button" className={styles.resetButton} onClick={resetForm}>
-                ล้างข้อมูล
-              </button>
+                  <button type="submit" className={styles.primaryButton} disabled={loading}>
+                    {loading ? (
+                      <span className={styles.spinnerWrap}>
+                        <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
+                      </span>
+                    ) : (
+                      "Generate DOCX"
+                    )}
+                  </button>
+                  <button type="button" className={styles.resetButton} onClick={resetForm}>
+                    ล้างข้อมูล
+                  </button>
+                </div>
+              </div>
 
               {error && <pre className={styles.error}>{error}</pre>}
-            </div>
-          </aside>
+            </section>
+          </div>
         </form>
       </div>
     </main>
