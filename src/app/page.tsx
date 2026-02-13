@@ -557,17 +557,17 @@ export default function HomePage() {
           <aside className={styles.sidebar}>
             <div className={styles.stickyCard}>
               <h3 className={styles.summaryTitle}>สรุปยอด</h3>
-              <dl>
+              <dl className={styles.summaryList}>
                 <div className={styles.summaryRow}>
-                  <dt>ราคาสินค้า (ก่อน VAT)</dt>
+                  <dt className={styles.summaryLabel}>ราคาสินค้า (ก่อน VAT)</dt>
                   <dd className={styles.summaryValue}>{formatMoney(subtotalNet)}</dd>
                 </div>
                 <div className={styles.summaryRow}>
-                  <dt>VAT 7%</dt>
+                  <dt className={styles.summaryLabel}>VAT 7%</dt>
                   <dd className={styles.summaryValue}>{formatMoney(vatAmount)}</dd>
                 </div>
                 <div className={`${styles.summaryRow} ${styles.totalRow}`}>
-                  <dt>รวมสุทธิ</dt>
+                  <dt className={styles.summaryLabel}>รวมสุทธิ</dt>
                   <dd className={`${styles.summaryValue} ${styles.grandTotalValue}`}>{formatMoney(grandTotal)}</dd>
                 </div>
               </dl>
