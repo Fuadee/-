@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
+import StatusActionDialog, { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
   jobs: JobRecord[];
@@ -15,12 +17,13 @@ type DashboardJobListProps = {
 
 type DashboardJobItem = JobRecord & {
   id: string;
-  status: string;
+  status: EffectiveStatus;
 };
 
 type DialogState = {
   id: string;
   title: string;
+  status: EffectiveStatus;
 } | null;
 
 const formatDate = (value: unknown) => {
@@ -39,28 +42,33 @@ const formatDate = (value: unknown) => {
   }).format(date);
 };
 
-const normalizeStatus = (value: unknown): string => {
+const normalizeStatus = (value: unknown): EffectiveStatus => {
   if (typeof value !== "string") {
-    return "generated";
+    return "pending_approval";
   }
 
   const trimmed = value.trim();
-  return trimmed || "generated";
-};
-
-const getStatusLabel = (status: string): string => {
-  if (status === "generated") {
-    return "รออนุมัติ";
+  if (!trimmed || trimmed === "generated") {
+    return "pending_approval";
   }
 
-  if (status === "pending_review") {
-    return "รอตรวจ";
+  if (trimmed === "pending_review" || trimmed === "awaiting_payment" || trimmed === "needs_fix" || trimmed === "pending_approval") {
+    return trimmed;
   }
 
-  return status;
+  return "pending_approval";
 };
+
+const getStatusLabel = (status: EffectiveStatus): string =>
+  ({
+    pending_approval: "รออนุมัติ",
+    pending_review: "รอตรวจ",
+    awaiting_payment: "รอเบิกจ่าย",
+    needs_fix: "รอการแก้ไข"
+  })[status];
 
 export default function DashboardJobList({ jobs, table, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
 
   const [items, setItems] = useState<DashboardJobItem[]>(
@@ -74,22 +82,27 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleStatusClick = (id: string, title: string) => {
-    setDialog({ id, title });
+  const handleStatusClick = (id: string, title: string, status: EffectiveStatus) => {
+    setDialog({ id, title, status });
     setErrorMessage(null);
   };
 
-  const handleConfirmUpdated = async () => {
-    if (!dialog || isSaving) {
+  const handleUpdateStatus = async (nextStatus: EffectiveStatus) => {
+    if (!dialog || isSaving || dialog.status === "awaiting_payment") {
+      return;
+    }
+
+    if (hasUserIdColumn && !currentUserId) {
+      setErrorMessage("ไม่พบผู้ใช้งานปัจจุบัน จึงไม่สามารถอัปเดตสถานะได้");
       return;
     }
 
     setIsSaving(true);
     setErrorMessage(null);
 
-    let query = supabase.from(table).update({ status: "pending_review" }).eq("id", dialog.id);
+    let query = supabase.from(table).update({ status: nextStatus }).eq("id", dialog.id);
 
-    if (hasUserIdColumn && currentUserId) {
+    if (hasUserIdColumn) {
       query = query.eq("user_id", currentUserId);
     }
 
@@ -101,9 +114,10 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
       return;
     }
 
-    setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: "pending_review" } : item)));
+    setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: nextStatus } : item)));
     setDialog(null);
     setIsSaving(false);
+    router.refresh();
   };
 
   if (items.length === 0) {
@@ -142,7 +156,7 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
                   <p className="text-xs text-slate-500">สถานะ</p>
                   <button
                     type="button"
-                    onClick={() => handleStatusClick(id, getJobTitle(job))}
+                    onClick={() => handleStatusClick(id, getJobTitle(job), status)}
                     className="rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                   >
                     {getStatusLabel(status)}
@@ -157,49 +171,21 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
         })}
       </div>
 
-      {dialog ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-900">อัปเดตสถานะงาน</h2>
-            <p className="mt-2 text-sm text-slate-600">{dialog.title}</p>
-            <p className="mt-4 text-sm text-slate-700">
-              เข้าไปที่{" "}
-              <a
-                href="https://eprocurement.pea.co.th/"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-blue-600 underline underline-offset-2"
-              >
-                https://eprocurement.pea.co.th/
-              </a>{" "}
-              เพื่อลงข้อมูล
-            </p>
-
-            {errorMessage ? (
-              <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
-            ) : null}
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDialog(null)}
-                disabled={isSaving}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                ยังไม่ลง
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmUpdated}
-                disabled={isSaving}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isSaving ? "กำลังบันทึก..." : "ลงแล้ว"}
-              </button>
-            </div>
-          </div>
+      {errorMessage ? (
+        <div className="fixed right-4 top-4 z-[60] max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow">
+          {errorMessage}
         </div>
       ) : null}
+
+      <StatusActionDialog
+        open={Boolean(dialog)}
+        jobTitle={dialog?.title ?? ""}
+        status={dialog?.status ?? "pending_approval"}
+        isSaving={isSaving}
+        errorMessage={errorMessage}
+        onClose={() => setDialog(null)}
+        onUpdateStatus={handleUpdateStatus}
+      />
     </>
   );
 }
