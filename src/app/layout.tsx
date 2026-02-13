@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-
-import { AuthSidebarActions } from "@/components/auth/AuthSidebarActions";
-
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -24,7 +21,6 @@ export default function RootLayout({
             <nav>
               <Link href="/procure">งานจัดซื้อจัดจ้างไม่เกิน 5 หมื่นบาท</Link>
             </nav>
-            <AuthSidebarActions />
           </aside>
           <main style={{ padding: 24 }}>{children}</main>
         </div>
