@@ -266,7 +266,6 @@ export default function GenerateClient() {
     if (!department.trim()) errors.department = "กรุณากรอกแผนก";
     if (!subject.trim()) errors.subject = "กรุณากรอกเรื่อง";
     if (!purpose.trim()) errors.purpose = "กรุณากรอกวัตถุประสงค์";
-    if (!budgetAmount.trim()) errors.budgetAmount = "กรุณากรอกวงเงิน";
     if (!vendorName.trim()) errors.vendorName = "กรุณากรอกชื่อผู้ขาย";
     if (!vendorAddress.trim()) errors.vendorAddress = "กรุณากรอกที่อยู่ผู้ขาย";
     if (!receiptNo.trim()) errors.receiptNo = "กรุณากรอกเลขที่ใบเสร็จ";
@@ -454,14 +453,14 @@ export default function GenerateClient() {
               <h2 className={styles.sectionTitle}>งบประมาณ/เอกสาร</h2>
               <div className={styles.grid2}>
                 <div className={`${styles.field} ${styles.fullWidth}`}>
-                  <label htmlFor="budget_amount">วงเงิน</label>
+                  {/* <label htmlFor="budget_amount">วงเงิน</label>
                   <input
                     id="budget_amount"
                     name="budget_amount"
                     type="text"
                     value={budgetAmount}
                     onChange={(event) => setBudgetAmount(event.target.value)}
-                  />
+                  /> */}
                   {validationErrors.budgetAmount && <p className={styles.fieldError}>{validationErrors.budgetAmount}</p>}
                 </div>
                 <div className={styles.field}>
@@ -544,9 +543,9 @@ export default function GenerateClient() {
             <section className={styles.card}>
               <div className={styles.sectionHead}>
                 <h2 className={styles.sectionTitle}>รายละเอียดวัสดุ</h2>
-                <button type="button" className={styles.secondaryButton} onClick={addItem}>
+                {/* <button type="button" className={styles.secondaryButton} onClick={addItem}>
                   + เพิ่มรายการ
-                </button>
+                </button> */}
               </div>
 
               <div className={styles.tableWrap}>
