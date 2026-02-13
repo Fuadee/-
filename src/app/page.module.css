@@ -1,12 +1,12 @@
 .page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: 36px 24px 48px;
 }
 
 .header h1 {
@@ -17,14 +17,15 @@
 }
 
 .header p {
-  margin: 10px 0 24px;
+  margin: 10px 0 28px;
   color: #475569;
 }
 
 .layout {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 32px;
+  gap: 28px;
+  align-items: start;
 }
 
 .mainColumn {
@@ -33,13 +34,27 @@
   gap: 24px;
 }
 
+.sidebar {
+  grid-column: span 4;
+  min-width: 0;
+}
+
 .card,
 .stickyCard {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   padding: 24px;
+}
+
+.stickyCard {
+  position: sticky;
+  top: 24px;
+  border-radius: 20px;
+  border-color: #dbe2ea;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.08);
+  padding: 26px;
 }
 
 .sectionTitle,
@@ -53,8 +68,8 @@
 }
 
 .summaryTitle {
-  margin-bottom: 4px;
   border-bottom: none;
+  margin-bottom: 10px;
   padding-bottom: 0;
 }
 
@@ -196,8 +211,9 @@
 
 .secondaryButton,
 .secondaryButtonBottom {
-  background: #e0e7ff;
-  color: #1e3a8a;
+  background: #eef2f7;
+  color: #1e293b;
+  border: 1px solid #d7dee8;
 }
 
 .secondaryButtonBottom {
@@ -216,63 +232,57 @@
   filter: brightness(0.98);
 }
 
-.sidebar {
-  grid-column: span 4;
-}
-
-.stickyCard {
-  position: sticky;
-  top: 24px;
-  width: 100%;
-  border-radius: 16px;
-  border-color: #e2e8f0;
-  background: #ffffff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-  padding: 24px;
-}
-
-.stickyCard dl {
-  margin: 12px 0 0;
+.summaryList {
+  margin: 0;
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .summaryRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 16px;
 }
 
-.summaryRow dt {
-  font-size: 0.875rem;
+.summaryLabel {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   color: #64748b;
 }
 
 .summaryValue {
-  font-weight: 500;
-  text-align: right;
+  margin: 0;
+  min-width: 120px;
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.2;
   color: #0f172a;
-  font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
-  min-width: 132px;
+  font-variant-numeric: tabular-nums;
 }
 
 .totalRow {
-  border-top: 1px solid #dbe3ef;
+  margin-top: 4px;
   padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .grandTotalValue {
-  font-size: 1.2rem;
-  font-weight: 600;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: #020617;
 }
 
 .totalText {
-  margin: 10px 0 0;
+  margin: 12px 0 0;
+  font-size: 0.85rem;
   color: #64748b;
-  font-size: 0.82rem;
   font-style: italic;
 }
 
@@ -280,10 +290,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 18px 0 14px;
-  padding: 12px;
-  background: #f8fafc;
+  margin: 20px 0 14px;
+  padding: 12px 14px;
   border-radius: 12px;
+  border: 1px solid #dbe3ec;
+  background: #f8fafc;
   color: #334155;
 }
 
@@ -295,13 +306,13 @@
 .primaryButton {
   width: 100%;
   color: #fff;
-  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 40%, #1e3a8a 100%);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.26);
 }
 
 .primaryButton:hover:not(:disabled) {
-  transform: scale(1.01);
-  box-shadow: 0 12px 20px rgba(15, 23, 42, 0.24);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(30, 58, 138, 0.26);
 }
 
 .primaryButton:disabled {
@@ -312,8 +323,9 @@
 .resetButton {
   width: 100%;
   margin-top: 10px;
-  background: #e2e8f0;
+  background: #f1f5f9;
   color: #334155;
+  border: 1px solid #d9e2ec;
 }
 
 .spinnerWrap {
@@ -363,7 +375,7 @@
 
 @media (max-width: 768px) {
   .container {
-    padding: 24px 16px;
+    padding: 24px 16px 36px;
   }
 
   .grid2 {
@@ -372,5 +384,9 @@
 
   .fullWidth {
     grid-column: span 1;
+  }
+
+  .stickyCard {
+    padding: 22px;
   }
 }
