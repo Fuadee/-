@@ -15,7 +15,8 @@ const COLUMN_PROBE_CANDIDATES = [
   "doc_url",
   "file_url",
   "storage_path",
-  "payload"
+  "payload",
+  "updated_at"
 ] as const;
 
 export type JobRecord = Record<string, unknown>;

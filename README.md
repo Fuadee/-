@@ -152,3 +152,15 @@ Use values from your Supabase project settings (URL + anon public key).
 ## Route protection
 - Site is protected globally by Supabase Auth middleware; only `/login` (and auth callback paths) is public.
 - Unauthenticated requests to other pages are redirected to `/login`.
+
+## SQL migration snippet (manual)
+
+> เพิ่มคอลัมน์รองรับการแก้ไขงานเดิม โดย **ไม่ auto-run**
+
+```sql
+alter table public.generated_docs
+  add column if not exists payload jsonb;
+
+alter table public.generated_docs
+  add column if not exists updated_at timestamptz default now();
+```

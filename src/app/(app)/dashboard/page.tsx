@@ -90,7 +90,7 @@ export default async function DashboardPage() {
               return (
                 <Link
                   key={id}
-                  href={`/dashboard/${id}`}
+                  href={`/?job=${encodeURIComponent(id)}`}
                   className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:bg-slate-50"
                 >
                   <div className="grid gap-2 sm:grid-cols-3 sm:items-center">
@@ -107,6 +107,7 @@ export default async function DashboardPage() {
                       <p className="text-slate-700">{status}</p>
                     </div>
                   </div>
+                  <p className="mt-2 text-xs font-medium text-slate-500">แก้ไขงานนี้ →</p>
                 </Link>
               );
             })}
