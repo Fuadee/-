@@ -37,7 +37,7 @@ const normalizeItems = (items: ItemPayload[] | null | undefined) => {
   return items.map((item, index) => {
     const qty = toNumber(item.qty);
     const price = toNumber(item.price);
-    const total = qty * price;
+    const totalInclVat = qty * price;
 
     return {
       no: index + 1,
@@ -46,23 +46,46 @@ const normalizeItems = (items: ItemPayload[] | null | undefined) => {
       unit: item.unit ?? "",
       price: formatMoneyTH(price),
       spec: item.spec ?? "",
-      total: formatMoneyTH(total),
+      total: formatMoneyTH(totalInclVat),
       price_fmt: formatMoneyTH(price),
-      total_fmt: formatMoneyTH(total),
+      total_fmt: formatMoneyTH(totalInclVat),
       qty_num: qty,
       price_num: price,
-      total_num: total
+      total_num: totalInclVat
     };
   });
 };
 
+const roundForDisplay = (value: number) => Number(value.toFixed(2));
+
 export const buildDocxTemplateData = (body: GeneratePayload) => {
   const normalizedItems = normalizeItems(body.items);
-  const subtotal = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
+  const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
   const vatEnabled = body.vat_enabled ?? true;
   const vatRate = toNumber(body.vat_rate ?? 7);
-  const vatAmount = vatEnabled ? subtotal * (vatRate / 100) : 0;
-  const grandTotal = subtotal + vatAmount;
+  const vatMultiplier = 1 + vatRate / 100;
+
+  const items = normalizedItems.map((item) => {
+    const totalNet = vatEnabled ? item.total_num / vatMultiplier : item.total_num;
+    const vatAmountItem = vatEnabled ? item.total_num - totalNet : 0;
+
+    return {
+      ...item,
+      total_net_num: totalNet,
+      vat_amount_num: vatAmountItem,
+      total_net_fmt: formatMoneyTH(roundForDisplay(totalNet)),
+      vat_amount_fmt: formatMoneyTH(roundForDisplay(vatAmountItem))
+    };
+  });
+
+  const subtotalNet = items.reduce((sum, item) => sum + item.total_net_num, 0);
+  const vatAmountTotal = vatEnabled ? subtotalInclVat - subtotalNet : 0;
+  const grandTotal = subtotalInclVat;
+
+  const subtotalInclVatDisplay = roundForDisplay(subtotalInclVat);
+  const subtotalNetDisplay = roundForDisplay(subtotalNet);
+  const vatAmountDisplay = roundForDisplay(vatAmountTotal);
+  const grandTotalDisplay = roundForDisplay(grandTotal);
 
   return {
     department: body.department ?? "",
@@ -77,16 +100,20 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     assignee: body.assignee ?? "",
     assignee_position: body.assignee_position ?? "",
     approved_by: body.approved_by ?? "",
-    items: normalizedItems,
+    items,
     vat_enabled: vatEnabled,
     vat_rate: vatRate,
     vat_rate_percent: `${vatRate}%`,
-    subtotal,
-    vat_amount: vatAmount,
+    subtotal: subtotalInclVat,
+    subtotal_incl_vat: subtotalInclVat,
+    subtotal_net: subtotalNet,
+    vat_amount: vatAmountTotal,
     grand_total: grandTotal,
-    subtotal_fmt: formatMoneyTH(subtotal),
-    vat_amount_fmt: formatMoneyTH(vatAmount),
-    grand_total_fmt: formatMoneyTH(grandTotal),
-    grand_total_text: toThaiBahtText(grandTotal)
+    subtotal_fmt: formatMoneyTH(subtotalInclVatDisplay),
+    subtotal_incl_vat_fmt: formatMoneyTH(subtotalInclVatDisplay),
+    subtotal_net_fmt: formatMoneyTH(subtotalNetDisplay),
+    vat_amount_fmt: formatMoneyTH(vatAmountDisplay),
+    grand_total_fmt: formatMoneyTH(grandTotalDisplay),
+    grand_total_text: toThaiBahtText(grandTotalDisplay)
   };
 };
