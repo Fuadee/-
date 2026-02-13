@@ -35,9 +35,15 @@ export async function GET() {
   });
 
   checks.push({
-    name: "VAT 7% amount",
-    actual: String(calc.vat_amount),
-    expected: String(56)
+    name: "VAT 7% amount from VAT-included prices",
+    actual: String(Number(calc.vat_amount.toFixed(2))),
+    expected: String(52.34)
+  });
+
+  checks.push({
+    name: "Grand total equals VAT-included subtotal",
+    actual: String(calc.grand_total),
+    expected: String(800)
   });
 
   const failures = checks.filter((check) => check.actual !== check.expected);

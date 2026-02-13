@@ -66,6 +66,9 @@ Body:
 
 รองรับ VAT เพิ่มเติม:
 
+> ระบบนี้ใช้ราคาที่รวม VAT แล้ว และทำการถอย VAT อัตโนมัติ
+
+
 ```json
 {
   "vat_enabled": true,
@@ -98,8 +101,8 @@ Response:
 {{assignee}}
 {{assignee_position}}
 {{approved_by}}
-{{subtotal_fmt}}
-{{vat_rate}} หรือ {{vat_rate_percent}}
+{{subtotal_net_fmt}}
+{{vat_rate}}
 {{vat_amount_fmt}}
 {{grand_total_fmt}}
 {{grand_total_text}}
@@ -124,9 +127,9 @@ Response:
 ผู้ได้รับมอบหมาย: {assignee}
 ตำแหน่ง: {assignee_position}
 อนุมัติผ่าน: {approved_by}
-ยอดรวมก่อน VAT: {subtotal_fmt}
-VAT ({vat_rate_percent}): {vat_amount_fmt}
-รวมสุทธิ: {grand_total_fmt}
+ราคาสินค้า (ก่อน VAT): {subtotal_net_fmt}
+ภาษีมูลค่าเพิ่ม ({vat_rate}%): {vat_amount_fmt}
+รวมเป็นเงินทั้งสิ้น: {grand_total_fmt}
 ({grand_total_text})
 ```
 
