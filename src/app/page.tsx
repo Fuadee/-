@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
+import styles from "./page.module.css";
 
 type ItemForm = {
   no?: number;
@@ -16,6 +17,18 @@ type ApiErrorResponse = {
   properties?: unknown;
 };
 
+type ValidationErrors = {
+  department?: string;
+  subject?: string;
+  purpose?: string;
+  budgetAmount?: string;
+  vendorName?: string;
+  vendorAddress?: string;
+  receiptNo?: string;
+  approvedBy?: string;
+  items?: string[];
+};
+
 const createEmptyItem = (): ItemForm => ({
   no: 1,
   name: "",
@@ -28,6 +41,67 @@ const createEmptyItem = (): ItemForm => ({
 const parseNumber = (value: string): number => {
   const normalized = Number(value.replace(/,/g, "").trim());
   return Number.isFinite(normalized) ? normalized : 0;
+};
+
+const formatMoney = (value: number): string =>
+  new Intl.NumberFormat("th-TH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+
+const readThaiBaht = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "ศูนย์บาทถ้วน";
+  }
+
+  const digitText = ["", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+  const positionText = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน", "ล้าน"];
+
+  const toThaiNumber = (num: number): string => {
+    if (num === 0) {
+      return "";
+    }
+
+    let output = "";
+    const text = String(num);
+
+    for (let i = 0; i < text.length; i += 1) {
+      const digit = Number(text[i]);
+      const position = text.length - i - 1;
+
+      if (digit === 0) {
+        continue;
+      }
+
+      if (position === 0 && digit === 1 && text.length > 1) {
+        output += "เอ็ด";
+      } else if (position === 1 && digit === 2) {
+        output += "ยี่";
+      } else if (position === 1 && digit === 1) {
+        output += "";
+      } else {
+        output += digitText[digit];
+      }
+
+      output += positionText[position % 6];
+
+      if (position > 0 && position % 6 === 0) {
+        output += "ล้าน";
+      }
+    }
+
+    return output;
+  };
+
+  const integerValue = Math.floor(value);
+  const satangValue = Math.round((value - integerValue) * 100);
+  const baht = `${toThaiNumber(integerValue)}บาท`;
+
+  if (satangValue === 0) {
+    return `${baht}ถ้วน`;
+  }
+
+  return `${baht}${toThaiNumber(satangValue)}สตางค์`;
 };
 
 export default function HomePage() {
@@ -46,6 +120,8 @@ export default function HomePage() {
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [vatIncluded] = useState(true);
 
   const updateItem = (index: number, field: keyof ItemForm, value: string) => {
     setItems((prevItems) =>
@@ -68,11 +144,94 @@ export default function HomePage() {
     });
   };
 
+  const resetForm = () => {
+    const isConfirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?");
+    if (!isConfirmed) {
+      return;
+    }
+
+    setDepartment("");
+    setSubject("");
+    setSubjectDetail("");
+    setPurpose("");
+    setBudgetAmount("");
+    setBudgetSource("");
+    setVendorName("");
+    setVendorAddress("");
+    setReceiptNo("");
+    setAssignee("");
+    setAssigneePosition("");
+    setApprovedBy("");
+    setItems([createEmptyItem()]);
+    setError(null);
+    setValidationErrors({});
+  };
+
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
   const grandTotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
+  const subtotalNet = vatIncluded ? grandTotal / 1.07 : grandTotal;
+  const vatAmount = vatIncluded ? grandTotal - subtotalNet : grandTotal * 0.07;
+
+  const itemErrors = useMemo(
+    () =>
+      items.map((item) => {
+        if (!item.name.trim()) {
+          return "กรุณากรอกชื่อวัสดุ";
+        }
+        if (parseNumber(item.qty) <= 0) {
+          return "จำนวนต้องมากกว่า 0";
+        }
+        if (!item.unit.trim()) {
+          return "กรุณากรอกหน่วย";
+        }
+        if (parseNumber(item.price) <= 0) {
+          return "ราคาต่อหน่วยต้องมากกว่า 0";
+        }
+        return "";
+      }),
+    [items]
+  );
+
+  const validateForm = (): ValidationErrors => {
+    const errors: ValidationErrors = {
+      items: itemErrors
+    };
+
+    if (!department.trim()) errors.department = "กรุณากรอกแผนก";
+    if (!subject.trim()) errors.subject = "กรุณากรอกเรื่อง";
+    if (!purpose.trim()) errors.purpose = "กรุณากรอกวัตถุประสงค์";
+    if (!budgetAmount.trim()) errors.budgetAmount = "กรุณากรอกวงเงิน";
+    if (!vendorName.trim()) errors.vendorName = "กรุณากรอกชื่อผู้ขาย";
+    if (!vendorAddress.trim()) errors.vendorAddress = "กรุณากรอกที่อยู่ผู้ขาย";
+    if (!receiptNo.trim()) errors.receiptNo = "กรุณากรอกเลขที่ใบเสร็จ";
+    if (!approvedBy.trim()) errors.approvedBy = "กรุณากรอกผู้อนุมัติ";
+
+    return errors;
+  };
+
+  const hasValidationError = (errors: ValidationErrors): boolean => {
+    return Boolean(
+      errors.department ||
+        errors.subject ||
+        errors.purpose ||
+        errors.budgetAmount ||
+        errors.vendorName ||
+        errors.vendorAddress ||
+        errors.receiptNo ||
+        errors.approvedBy ||
+        errors.items?.some(Boolean)
+    );
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const errors = validateForm();
+    setValidationErrors(errors);
+
+    if (hasValidationError(errors)) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -148,185 +307,306 @@ export default function HomePage() {
   };
 
   return (
-    <main>
-      <div className="card">
-        <h1>Generate DOCX</h1>
-        <form onSubmit={handleSubmit}>
-          <label htmlFor="department">แผนก</label>
-          <input
-            id="department"
-            name="department"
-            type="text"
-            value={department}
-            onChange={(event) => setDepartment(event.target.value)}
-          />
+    <main className={styles.page}>
+      <div className={styles.container}>
+        <div className={styles.header}>
+          <h1>Generate DOCX</h1>
+          <p>กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ</p>
+        </div>
 
-          <label htmlFor="subject">เรื่อง</label>
-          <input
-            id="subject"
-            name="subject"
-            type="text"
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            placeholder="กรอกชื่อเรื่อง"
-          />
+        <form onSubmit={handleSubmit} className={styles.layout}>
+          <div className={styles.mainColumn}>
+            <section className={styles.card}>
+              <h2>ข้อมูลเรื่อง</h2>
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="department">แผนก</label>
+                  <input
+                    id="department"
+                    name="department"
+                    type="text"
+                    value={department}
+                    onChange={(event) => setDepartment(event.target.value)}
+                  />
+                  {validationErrors.department && <p className={styles.fieldError}>{validationErrors.department}</p>}
+                </div>
 
-          <label htmlFor="subject_detail">รายละเอียดเรื่อง</label>
-          <textarea
-            id="subject_detail"
-            name="subject_detail"
-            value={subjectDetail}
-            onChange={(event) => setSubjectDetail(event.target.value)}
-          />
+                <div className={styles.field}>
+                  <label htmlFor="subject">เรื่อง</label>
+                  <input
+                    id="subject"
+                    name="subject"
+                    type="text"
+                    value={subject}
+                    onChange={(event) => setSubject(event.target.value)}
+                    placeholder="กรอกชื่อเรื่อง"
+                  />
+                  {validationErrors.subject && <p className={styles.fieldError}>{validationErrors.subject}</p>}
+                </div>
+              </div>
 
-          <label htmlFor="purpose">เพื่อ</label>
-          <textarea
-            id="purpose"
-            name="purpose"
-            value={purpose}
-            onChange={(event) => setPurpose(event.target.value)}
-          />
+              <div className={styles.field}>
+                <label htmlFor="subject_detail">รายละเอียดเรื่อง</label>
+                <textarea
+                  id="subject_detail"
+                  name="subject_detail"
+                  rows={3}
+                  value={subjectDetail}
+                  onChange={(event) => setSubjectDetail(event.target.value)}
+                />
+              </div>
 
-          <label htmlFor="budget_amount">วงเงิน</label>
-          <input
-            id="budget_amount"
-            name="budget_amount"
-            type="text"
-            value={budgetAmount}
-            onChange={(event) => setBudgetAmount(event.target.value)}
-          />
+              <div className={styles.field}>
+                <label htmlFor="purpose">เพื่อ</label>
+                <textarea
+                  id="purpose"
+                  name="purpose"
+                  rows={3}
+                  value={purpose}
+                  onChange={(event) => setPurpose(event.target.value)}
+                />
+                {validationErrors.purpose && <p className={styles.fieldError}>{validationErrors.purpose}</p>}
+              </div>
+            </section>
 
-          <label htmlFor="budget_source">งบ</label>
-          <input
-            id="budget_source"
-            name="budget_source"
-            type="text"
-            value={budgetSource}
-            onChange={(event) => setBudgetSource(event.target.value)}
-          />
+            <section className={styles.card}>
+              <h2>งบประมาณ/เอกสาร</h2>
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="budget_amount">วงเงิน</label>
+                  <input
+                    id="budget_amount"
+                    name="budget_amount"
+                    type="text"
+                    value={budgetAmount}
+                    onChange={(event) => setBudgetAmount(event.target.value)}
+                  />
+                  {validationErrors.budgetAmount && <p className={styles.fieldError}>{validationErrors.budgetAmount}</p>}
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="budget_source">งบ</label>
+                  <input
+                    id="budget_source"
+                    name="budget_source"
+                    type="text"
+                    value={budgetSource}
+                    onChange={(event) => setBudgetSource(event.target.value)}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
+                  <input
+                    id="receipt_no"
+                    name="receipt_no"
+                    type="text"
+                    value={receiptNo}
+                    onChange={(event) => setReceiptNo(event.target.value)}
+                    placeholder="เช่น INV-2024-001"
+                  />
+                  {validationErrors.receiptNo && <p className={styles.fieldError}>{validationErrors.receiptNo}</p>}
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="approved_by">อนุมัติผ่าน</label>
+                  <input
+                    id="approved_by"
+                    name="approved_by"
+                    type="text"
+                    value={approvedBy}
+                    onChange={(event) => setApprovedBy(event.target.value)}
+                    placeholder="เช่น ผู้จัดการการไฟฟ้า"
+                  />
+                  {validationErrors.approvedBy && <p className={styles.fieldError}>{validationErrors.approvedBy}</p>}
+                </div>
+              </div>
 
-          <label htmlFor="vendor_name">บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน</label>
-          <input
-            id="vendor_name"
-            name="vendor_name"
-            type="text"
-            value={vendorName}
-            onChange={(event) => setVendorName(event.target.value)}
-            placeholder="เช่น บริษัท ABC จำกัด"
-          />
+              <div className={styles.field}>
+                <label htmlFor="vendor_name">บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน</label>
+                <input
+                  id="vendor_name"
+                  name="vendor_name"
+                  type="text"
+                  value={vendorName}
+                  onChange={(event) => setVendorName(event.target.value)}
+                  placeholder="เช่น บริษัท ABC จำกัด"
+                />
+                {validationErrors.vendorName && <p className={styles.fieldError}>{validationErrors.vendorName}</p>}
+              </div>
 
-          <label htmlFor="vendor_address">ที่อยู่</label>
-          <textarea
-            id="vendor_address"
-            name="vendor_address"
-            value={vendorAddress}
-            onChange={(event) => setVendorAddress(event.target.value)}
-            placeholder="ที่อยู่ตามใบเสร็จ"
-          />
+              <div className={styles.field}>
+                <label htmlFor="vendor_address">ที่อยู่</label>
+                <textarea
+                  id="vendor_address"
+                  name="vendor_address"
+                  rows={3}
+                  value={vendorAddress}
+                  onChange={(event) => setVendorAddress(event.target.value)}
+                  placeholder="ที่อยู่ตามใบเสร็จ"
+                />
+                {validationErrors.vendorAddress && <p className={styles.fieldError}>{validationErrors.vendorAddress}</p>}
+              </div>
 
-          <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
-          <input
-            id="receipt_no"
-            name="receipt_no"
-            type="text"
-            value={receiptNo}
-            onChange={(event) => setReceiptNo(event.target.value)}
-            placeholder="เช่น INV-2024-001"
-          />
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="assignee">ผู้ได้รับมอบหมาย</label>
+                  <input
+                    id="assignee"
+                    name="assignee"
+                    type="text"
+                    value={assignee}
+                    onChange={(event) => setAssignee(event.target.value)}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label htmlFor="assignee_position">ตำแหน่งผู้ได้รับมอบหมาย</label>
+                  <input
+                    id="assignee_position"
+                    name="assignee_position"
+                    type="text"
+                    value={assigneePosition}
+                    onChange={(event) => setAssigneePosition(event.target.value)}
+                    placeholder="เช่น ผู้ช่วยช่าง, ช่าง, วิศวกร"
+                  />
+                </div>
+              </div>
+            </section>
 
-          <label htmlFor="assignee">ผู้ได้รับมอบหมาย</label>
-          <input
-            id="assignee"
-            name="assignee"
-            type="text"
-            value={assignee}
-            onChange={(event) => setAssignee(event.target.value)}
-          />
+            <section className={styles.card}>
+              <div className={styles.sectionHead}>
+                <h2>รายละเอียดวัสดุ</h2>
+                <button type="button" className={styles.secondaryButton} onClick={addItem}>
+                  + เพิ่มรายการ
+                </button>
+              </div>
 
-          <label htmlFor="assignee_position">ตำแหน่งผู้ได้รับมอบหมาย</label>
-          <input
-            id="assignee_position"
-            name="assignee_position"
-            type="text"
-            value={assigneePosition}
-            onChange={(event) => setAssigneePosition(event.target.value)}
-            placeholder="เช่น ผู้ช่วยช่าง, ช่าง, วิศวกร, หัวหน้าชุดปฏิบัติการ"
-          />
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>ลำดับ</th>
+                      <th>ชื่อวัสดุ</th>
+                      <th>จำนวน</th>
+                      <th>หน่วย</th>
+                      <th>ราคาต่อหน่วย (รวม VAT)</th>
+                      <th>ราคารวม</th>
+                      <th>คุณลักษณะ (spec)</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, index) => (
+                      <tr key={`item-${index}`}>
+                        <td>
+                          <input id={`item-no-${index}`} type="text" value={index + 1} readOnly />
+                        </td>
+                        <td>
+                          <input
+                            id={`item-name-${index}`}
+                            type="text"
+                            value={item.name}
+                            onChange={(event) => updateItem(index, "name", event.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            id={`item-qty-${index}`}
+                            type="text"
+                            value={item.qty}
+                            onChange={(event) => updateItem(index, "qty", event.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            id={`item-unit-${index}`}
+                            type="text"
+                            value={item.unit}
+                            onChange={(event) => updateItem(index, "unit", event.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            id={`item-price-${index}`}
+                            type="text"
+                            value={item.price}
+                            onChange={(event) => updateItem(index, "price", event.target.value)}
+                          />
+                        </td>
+                        <td className={styles.totalCell}>{formatMoney(itemTotal(item))}</td>
+                        <td>
+                          <details>
+                            <summary className={styles.summaryToggle}>เปิด/ซ่อน</summary>
+                            <textarea
+                              id={`item-spec-${index}`}
+                              rows={3}
+                              value={item.spec}
+                              onChange={(event) => updateItem(index, "spec", event.target.value)}
+                            />
+                          </details>
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.removeButton}
+                            onClick={() => removeItem(index)}
+                          >
+                            ลบ
+                          </button>
+                          {validationErrors.items?.[index] && (
+                            <p className={styles.fieldError}>{validationErrors.items[index]}</p>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-          <label htmlFor="approved_by">อนุมัติผ่าน</label>
-          <input
-            id="approved_by"
-            name="approved_by"
-            type="text"
-            value={approvedBy}
-            onChange={(event) => setApprovedBy(event.target.value)}
-            placeholder="เช่น ผู้จัดการการไฟฟ้า / หัวหน้าส่วน / (ชื่อ-นามสกุล)"
-          />
-
-          <h2>รายละเอียดวัสดุ</h2>
-          {items.map((item, index) => (
-            <div key={`item-${index}`}>
-              <label htmlFor={`item-no-${index}`}>ลำดับ</label>
-              <input id={`item-no-${index}`} type="text" value={index + 1} readOnly />
-
-              <label htmlFor={`item-name-${index}`}>ชื่อวัสดุ</label>
-              <input
-                id={`item-name-${index}`}
-                type="text"
-                value={item.name}
-                onChange={(event) => updateItem(index, "name", event.target.value)}
-              />
-
-              <label htmlFor={`item-qty-${index}`}>จำนวน</label>
-              <input
-                id={`item-qty-${index}`}
-                type="text"
-                value={item.qty}
-                onChange={(event) => updateItem(index, "qty", event.target.value)}
-              />
-
-              <label htmlFor={`item-unit-${index}`}>หน่วย</label>
-              <input
-                id={`item-unit-${index}`}
-                type="text"
-                value={item.unit}
-                onChange={(event) => updateItem(index, "unit", event.target.value)}
-              />
-
-              <label htmlFor={`item-price-${index}`}>ราคา/หน่วย</label>
-              <input
-                id={`item-price-${index}`}
-                type="text"
-                value={item.price}
-                onChange={(event) => updateItem(index, "price", event.target.value)}
-              />
-
-              <label htmlFor={`item-spec-${index}`}>รายละเอียดคุณลักษณะ (spec)</label>
-              <textarea
-                id={`item-spec-${index}`}
-                value={item.spec}
-                onChange={(event) => updateItem(index, "spec", event.target.value)}
-              />
-
-              <p>รวมรายการนี้: {itemTotal(item)}</p>
-              <button type="button" onClick={() => removeItem(index)}>
-                ลบ
+              <button type="button" className={styles.secondaryButtonBottom} onClick={addItem}>
+                + เพิ่มรายการ
               </button>
-              <hr />
+            </section>
+          </div>
+
+          <aside className={styles.sidebar}>
+            <div className={styles.stickyCard}>
+              <h3>สรุปยอด</h3>
+              <dl>
+                <div>
+                  <dt>ราคาสินค้า (ก่อน VAT)</dt>
+                  <dd>{formatMoney(subtotalNet)}</dd>
+                </div>
+                <div>
+                  <dt>VAT 7%</dt>
+                  <dd>{formatMoney(vatAmount)}</dd>
+                </div>
+                <div className={styles.totalRow}>
+                  <dt>รวมสุทธิ</dt>
+                  <dd>{formatMoney(grandTotal)}</dd>
+                </div>
+              </dl>
+              <p className={styles.totalText}>{readThaiBaht(grandTotal)}</p>
+
+              <label className={styles.toggleRow}>
+                <span>VAT included mode</span>
+                <input type="checkbox" checked={vatIncluded} readOnly aria-label="VAT included mode" />
+              </label>
+
+              <button type="submit" className={styles.primaryButton} disabled={loading}>
+                {loading ? (
+                  <span className={styles.spinnerWrap}>
+                    <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
+                  </span>
+                ) : (
+                  "Generate DOCX"
+                )}
+              </button>
+              <button type="button" className={styles.resetButton} onClick={resetForm}>
+                ล้างข้อมูล
+              </button>
+
+              {error && <pre className={styles.error}>{error}</pre>}
             </div>
-          ))}
-
-          <button type="button" onClick={addItem}>
-            เพิ่มรายการ
-          </button>
-
-          <p>รวมทั้งหมด: {grandTotal}</p>
-
-          <button type="submit" disabled={loading}>
-            {loading ? "Generating..." : "Generate Word"}
-          </button>
+          </aside>
         </form>
-        {error && <pre className="error">{error}</pre>}
       </div>
     </main>
   );
