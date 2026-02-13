@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", Arial, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   background:
     radial-gradient(circle at 12% 0%, rgba(255, 190, 210, 0.22), transparent 40%),
     radial-gradient(circle at 88% 10%, rgba(191, 219, 254, 0.22), transparent 36%),
