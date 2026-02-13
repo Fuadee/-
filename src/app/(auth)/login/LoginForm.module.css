@@ -52,15 +52,26 @@
 .input {
   width: 100%;
   border-radius: 0.8rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #f1f5f9;
   padding: 0.75rem 1rem;
   font-size: 1rem;
+  color: #0f172a;
+  caret-color: #0f172a;
   outline: none;
+}
+
+.input::placeholder {
+  color: #94a3b8;
 }
 
 .input:focus-visible {
   border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.28);
+  box-shadow: 0 0 0 2px #8b5cf6;
+}
+
+.input:disabled {
+  opacity: 0.6;
 }
 
 .error {
