@@ -11,22 +11,6 @@
 - `SUPABASE_SERVICE_ROLE_KEY` (ใช้เฉพาะ server route handlers)
 - `TEMPLATE_PATH` (ตัวอย่าง: `server/templates/procurement_basic_v1.docx`)
 
-## Supabase Auth Setup (Email + Password)
-
-1. ไปที่ **Supabase Dashboard → Authentication → Providers → Email**
-2. เปิดใช้งาน **Email provider**
-3. สำหรับ development แนะนำให้ปิด **Confirm email** เพื่อให้สมัครสมาชิกแล้ว login ได้ทันที
-4. ตั้งค่า Redirect URLs ใน **Authentication → URL Configuration** เช่น:
-   - `http://localhost:3000/login`
-   - `http://localhost:3000/register`
-   - `https://<your-vercel-domain>/login`
-   - `https://<your-vercel-domain>/register`
-
-หน้าที่เกี่ยวข้องในแอป:
-- `/login` เข้าสู่ระบบด้วย email/password
-- `/register` สมัครสมาชิกด้วย email/password
-- `/procure*` ถูกป้องกันด้วย middleware และจะ redirect ไป login อัตโนมัติเมื่อไม่มี session
-
 ## Run Local
 
 ```bash
