@@ -110,7 +110,6 @@ export default function HomePage() {
   const [subjectDetail, setSubjectDetail] = useState("");
   const [purpose, setPurpose] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
-  const [budgetSource, setBudgetSource] = useState("");
   const [vendorName, setVendorName] = useState("");
   const [vendorAddress, setVendorAddress] = useState("");
   const [receiptNo, setReceiptNo] = useState("");
@@ -155,7 +154,6 @@ export default function HomePage() {
     setSubjectDetail("");
     setPurpose("");
     setBudgetAmount("");
-    setBudgetSource("");
     setVendorName("");
     setVendorAddress("");
     setReceiptNo("");
@@ -242,7 +240,7 @@ export default function HomePage() {
         subject_detail: subjectDetail,
         purpose,
         budget_amount: budgetAmount.trim(),
-        budget_source: budgetSource.trim(),
+        budget_source: "",
         vendor_name: vendorName.trim(),
         vendor_address: vendorAddress.trim(),
         receipt_no: receiptNo.trim(),
@@ -317,7 +315,7 @@ export default function HomePage() {
         <form onSubmit={handleSubmit} className={styles.layout}>
           <div className={styles.mainColumn}>
             <section className={styles.card}>
-              <h2>ข้อมูลเรื่อง</h2>
+              <h2 className={styles.sectionTitle}>ข้อมูลเรื่อง</h2>
               <div className={styles.grid2}>
                 <div className={styles.field}>
                   <label htmlFor="department">แผนก</label>
@@ -370,9 +368,9 @@ export default function HomePage() {
             </section>
 
             <section className={styles.card}>
-              <h2>งบประมาณ/เอกสาร</h2>
+              <h2 className={styles.sectionTitle}>งบประมาณ/เอกสาร</h2>
               <div className={styles.grid2}>
-                <div className={styles.field}>
+                <div className={`${styles.field} ${styles.fullWidth}`}>
                   <label htmlFor="budget_amount">วงเงิน</label>
                   <input
                     id="budget_amount"
@@ -382,16 +380,6 @@ export default function HomePage() {
                     onChange={(event) => setBudgetAmount(event.target.value)}
                   />
                   {validationErrors.budgetAmount && <p className={styles.fieldError}>{validationErrors.budgetAmount}</p>}
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="budget_source">งบ</label>
-                  <input
-                    id="budget_source"
-                    name="budget_source"
-                    type="text"
-                    value={budgetSource}
-                    onChange={(event) => setBudgetSource(event.target.value)}
-                  />
                 </div>
                 <div className={styles.field}>
                   <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
@@ -472,7 +460,7 @@ export default function HomePage() {
 
             <section className={styles.card}>
               <div className={styles.sectionHead}>
-                <h2>รายละเอียดวัสดุ</h2>
+                <h2 className={styles.sectionTitle}>รายละเอียดวัสดุ</h2>
                 <button type="button" className={styles.secondaryButton} onClick={addItem}>
                   + เพิ่มรายการ
                 </button>
@@ -568,19 +556,19 @@ export default function HomePage() {
 
           <aside className={styles.sidebar}>
             <div className={styles.stickyCard}>
-              <h3>สรุปยอด</h3>
+              <h3 className={styles.summaryTitle}>สรุปยอด</h3>
               <dl>
-                <div>
+                <div className={styles.summaryRow}>
                   <dt>ราคาสินค้า (ก่อน VAT)</dt>
-                  <dd>{formatMoney(subtotalNet)}</dd>
+                  <dd className={styles.summaryValue}>{formatMoney(subtotalNet)}</dd>
                 </div>
-                <div>
+                <div className={styles.summaryRow}>
                   <dt>VAT 7%</dt>
-                  <dd>{formatMoney(vatAmount)}</dd>
+                  <dd className={styles.summaryValue}>{formatMoney(vatAmount)}</dd>
                 </div>
-                <div className={styles.totalRow}>
+                <div className={`${styles.summaryRow} ${styles.totalRow}`}>
                   <dt>รวมสุทธิ</dt>
-                  <dd>{formatMoney(grandTotal)}</dd>
+                  <dd className={`${styles.summaryValue} ${styles.grandTotalValue}`}>{formatMoney(grandTotal)}</dd>
                 </div>
               </dl>
               <p className={styles.totalText}>{readThaiBaht(grandTotal)}</p>
