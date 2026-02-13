@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./page.module.css";
 
 type ItemForm = {
@@ -16,6 +17,11 @@ type ItemForm = {
 type ApiErrorResponse = {
   message?: string;
   properties?: unknown;
+};
+
+type JobResponse = {
+  job?: Record<string, unknown>;
+  message?: string;
 };
 
 type ValidationErrors = {
@@ -107,6 +113,8 @@ const readThaiBaht = (value: number): string => {
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editingJobId = searchParams.get("job")?.trim() || "";
   const [department, setDepartment] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectDetail, setSubjectDetail] = useState("");
@@ -120,9 +128,67 @@ export default function HomePage() {
   const [approvedBy, setApprovedBy] = useState("");
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
+  const [loadingJob, setLoadingJob] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [vatIncluded] = useState(true);
+
+  useEffect(() => {
+    if (!editingJobId) {
+      return;
+    }
+
+    const loadJob = async () => {
+      setLoadingJob(true);
+      setError(null);
+
+      try {
+        const response = await fetch(`/api/jobs/${encodeURIComponent(editingJobId)}`);
+        const json = (await response.json()) as JobResponse;
+
+        if (!response.ok) {
+          throw new Error(json.message ?? "ไม่สามารถโหลดข้อมูลงานสำหรับแก้ไขได้");
+        }
+
+        const job = json.job ?? {};
+        const payload = typeof job.payload === "object" && job.payload ? (job.payload as Record<string, unknown>) : job;
+
+        setDepartment(typeof payload.department === "string" ? payload.department : "");
+        setSubject(typeof payload.subject === "string" ? payload.subject : "");
+        setSubjectDetail(typeof payload.subject_detail === "string" ? payload.subject_detail : "");
+        setPurpose(typeof payload.purpose === "string" ? payload.purpose : "");
+        setBudgetAmount(typeof payload.budget_amount === "string" ? payload.budget_amount : "");
+        setVendorName(typeof payload.vendor_name === "string" ? payload.vendor_name : "");
+        setVendorAddress(typeof payload.vendor_address === "string" ? payload.vendor_address : "");
+        setReceiptNo(typeof payload.receipt_no === "string" ? payload.receipt_no : "");
+        setAssignee(typeof payload.assignee === "string" ? payload.assignee : "");
+        setAssigneePosition(typeof payload.assignee_position === "string" ? payload.assignee_position : "");
+        setApprovedBy(typeof payload.approved_by === "string" ? payload.approved_by : "");
+
+        const parsedItems = Array.isArray(payload.items)
+          ? payload.items.map((item, index) => {
+              const row = item as Record<string, unknown>;
+              return {
+                no: typeof row.no === "number" ? row.no : index + 1,
+                name: typeof row.name === "string" ? row.name : "",
+                qty: typeof row.qty === "string" || typeof row.qty === "number" ? String(row.qty) : "",
+                unit: typeof row.unit === "string" ? row.unit : "",
+                price: typeof row.price === "string" || typeof row.price === "number" ? String(row.price) : "",
+                spec: typeof row.spec === "string" ? row.spec : ""
+              };
+            })
+          : [];
+
+        setItems(parsedItems.length > 0 ? parsedItems : [createEmptyItem()]);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "ไม่สามารถโหลดข้อมูลงานสำหรับแก้ไขได้");
+      } finally {
+        setLoadingJob(false);
+      }
+    };
+
+    void loadJob();
+  }, [editingJobId]);
 
   const updateItem = (index: number, field: keyof ItemForm, value: string) => {
     setItems((prevItems) =>
@@ -257,12 +323,14 @@ export default function HomePage() {
         }))
       };
 
+      const requestBody = editingJobId ? { ...payload, jobId: editingJobId } : payload;
+
       const response = await fetch("/api/gen-docx", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -315,7 +383,17 @@ export default function HomePage() {
         <div className={styles.header}>
           <h1>Generate DOCX</h1>
           <p>กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ</p>
+          {editingJobId ? (
+            <div className={styles.editingBanner}>
+              <span className={styles.editingBadge}>Editing existing job</span>
+              <Link href="/dashboard" className={styles.backLink}>
+                ← Back to Dashboard
+              </Link>
+            </div>
+          ) : null}
         </div>
+
+        {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
 
         <form onSubmit={handleSubmit} className={styles.layout}>
           <div className={styles.mainColumn}>
@@ -591,7 +669,7 @@ export default function HomePage() {
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                       </span>
                     ) : (
-                      "Generate DOCX"
+                      editingJobId ? "บันทึกและ Generate ใหม่" : "Generate DOCX"
                     )}
                   </button>
                   <button type="button" className={styles.resetButton} onClick={resetForm}>
