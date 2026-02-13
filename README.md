@@ -64,6 +64,15 @@ Body:
 }
 ```
 
+รองรับ VAT เพิ่มเติม:
+
+```json
+{
+  "vat_enabled": true,
+  "vat_rate": 7
+}
+```
+
 Response:
 - ไฟล์ `.docx` (response headers ถูกตั้งเป็น attachment ให้ดาวน์โหลด)
 
@@ -89,16 +98,22 @@ Response:
 {{assignee}}
 {{assignee_position}}
 {{approved_by}}
+{{subtotal_fmt}}
+{{vat_rate}} หรือ {{vat_rate_percent}}
+{{vat_amount_fmt}}
+{{grand_total_fmt}}
+{{grand_total_text}}
 ```
 
 สำหรับรายการวัสดุแบบวนซ้ำ (`items`) ให้ใส่:
 
 ```text
 {#items}
-- {{name}} จำนวน {{qty}} {{unit}} ราคา {{price}} รวม {{total}}
+- {{name}} จำนวน {{qty}} {{unit}} ราคา {{price_fmt}} รวม {{total_fmt}}
 {/items}
 ```
 
+> หมายเหตุ: ในข้อมูล item จะยังมี `{{price}}` และ `{{total}}` เป็นสตริงที่ฟอร์แมตแล้วเช่นกัน
 
 ตัวอย่างการวางข้อความในเอกสาร:
 
@@ -109,6 +124,14 @@ Response:
 ผู้ได้รับมอบหมาย: {assignee}
 ตำแหน่ง: {assignee_position}
 อนุมัติผ่าน: {approved_by}
+ยอดรวมก่อน VAT: {subtotal_fmt}
+VAT ({vat_rate_percent}): {vat_amount_fmt}
+รวมสุทธิ: {grand_total_fmt}
+({grand_total_text})
 ```
+
+## Dev-only utility check route
+- `GET /api/dev-tests`
+- ใช้ตรวจผลลัพธ์เบื้องต้นของ `formatMoneyTH`, `toThaiBahtText` และการคำนวณ VAT 7%
 
 > หมายเหตุ: ไม่ต้องสร้างไฟล์ template อัตโนมัติ ให้สร้างและจัดรูปแบบใน Word ด้วย placeholder ตามด้านบน
