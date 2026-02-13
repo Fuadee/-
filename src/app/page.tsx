@@ -37,6 +37,9 @@ export default function HomePage() {
   const [purpose, setPurpose] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetSource, setBudgetSource] = useState("");
+  const [vendorName, setVendorName] = useState("");
+  const [vendorAddress, setVendorAddress] = useState("");
+  const [receiptNo, setReceiptNo] = useState("");
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
   const [approvedBy, setApprovedBy] = useState("");
@@ -79,9 +82,12 @@ export default function HomePage() {
         subject,
         subject_detail: subjectDetail,
         purpose,
-        budget_amount: budgetAmount,
-        budget_source: budgetSource,
-        assignee,
+        budget_amount: budgetAmount.trim(),
+        budget_source: budgetSource.trim(),
+        vendor_name: vendorName.trim(),
+        vendor_address: vendorAddress.trim(),
+        receipt_no: receiptNo.trim(),
+        assignee: assignee.trim(),
         assignee_position: assigneePosition.trim(),
         approved_by: approvedBy.trim(),
         items: items.map((item, index) => ({
@@ -197,6 +203,35 @@ export default function HomePage() {
             type="text"
             value={budgetSource}
             onChange={(event) => setBudgetSource(event.target.value)}
+          />
+
+          <label htmlFor="vendor_name">บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน</label>
+          <input
+            id="vendor_name"
+            name="vendor_name"
+            type="text"
+            value={vendorName}
+            onChange={(event) => setVendorName(event.target.value)}
+            placeholder="เช่น บริษัท ABC จำกัด"
+          />
+
+          <label htmlFor="vendor_address">ที่อยู่</label>
+          <textarea
+            id="vendor_address"
+            name="vendor_address"
+            value={vendorAddress}
+            onChange={(event) => setVendorAddress(event.target.value)}
+            placeholder="ที่อยู่ตามใบเสร็จ"
+          />
+
+          <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
+          <input
+            id="receipt_no"
+            name="receipt_no"
+            type="text"
+            value={receiptNo}
+            onChange={(event) => setReceiptNo(event.target.value)}
+            placeholder="เช่น INV-2024-001"
           />
 
           <label htmlFor="assignee">ผู้ได้รับมอบหมาย</label>
