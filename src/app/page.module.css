@@ -1,7 +1,7 @@
 .page {
   min-height: 100vh;
-  padding: 24px;
-  background: #f3f4f6;
+  padding: 28px;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
 .container {
@@ -12,55 +12,72 @@
 .header h1 {
   margin: 0;
   font-size: 2rem;
+  letter-spacing: -0.02em;
+  color: #0f172a;
 }
 
 .header p {
-  margin: 8px 0 20px;
-  color: #4b5563;
+  margin: 10px 0 24px;
+  color: #475569;
 }
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 32px;
   align-items: start;
 }
 
 .mainColumn {
   display: grid;
-  gap: 20px;
+  gap: 24px;
 }
 
 .card,
 .stickyCard {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  padding: 20px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  padding: 24px;
 }
 
-.card h2,
-.stickyCard h3 {
-  margin: 0 0 16px;
-  font-size: 1.15rem;
+.sectionTitle,
+.summaryTitle {
+  margin: 0 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.summaryTitle {
+  margin-bottom: 4px;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 16px;
+}
+
+.fullWidth {
+  grid-column: span 2;
 }
 
 .field {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .field label {
   display: block;
-  font-size: 0.92rem;
+  font-size: 0.875rem;
   margin-bottom: 6px;
   font-weight: 600;
+  color: #334155;
 }
 
 .field input,
@@ -68,24 +85,36 @@
 .table input,
 .table textarea {
   width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
   padding: 10px 12px;
   font-size: 0.95rem;
+  color: #0f172a;
   background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.field input,
+.table input {
+  min-height: 44px;
+}
+
+.field textarea,
+.table textarea {
+  min-height: 88px;
 }
 
 .field input:focus,
 .field textarea:focus,
 .table input:focus,
 .table textarea:focus {
-  outline: 2px solid #2563eb;
-  outline-offset: 1px;
-  border-color: #2563eb;
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .fieldError {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: #b91c1c;
   font-size: 0.8rem;
 }
@@ -95,13 +124,19 @@
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.sectionHead .sectionTitle {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .tableWrap {
   overflow-x: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
 }
 
 .table {
@@ -113,7 +148,7 @@
 
 .table th,
 .table td {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e2e8f0;
   padding: 10px;
   vertical-align: top;
 }
@@ -121,10 +156,11 @@
 .table th {
   position: sticky;
   top: 0;
-  background: #f9fafb;
+  background: #f8fafc;
   text-align: left;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   z-index: 1;
+  color: #475569;
 }
 
 .table tr:last-child td {
@@ -134,6 +170,8 @@
 .totalCell {
   font-weight: 700;
   white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .summaryToggle {
@@ -149,25 +187,33 @@
 .primaryButton,
 .resetButton {
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .secondaryButton,
 .secondaryButtonBottom {
-  background: #eef2ff;
+  background: #e0e7ff;
   color: #1e3a8a;
 }
 
 .secondaryButtonBottom {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .removeButton {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.removeButton:hover,
+.secondaryButton:hover,
+.secondaryButtonBottom:hover,
+.resetButton:hover {
+  filter: brightness(0.98);
 }
 
 .sidebar {
@@ -176,48 +222,85 @@
 
 .stickyCard {
   position: sticky;
-  top: 20px;
+  top: 24px;
+  border-radius: 16px;
+  border-color: #dbe3ef;
+  background: #fcfdff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  padding: 24px;
 }
 
 .stickyCard dl {
-  margin: 0;
+  margin: 12px 0 0;
+  display: grid;
+  gap: 16px;
 }
 
-.stickyCard dl > div {
+.summaryRow {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  font-size: 0.95rem;
+  align-items: center;
+  gap: 16px;
+}
+
+.summaryRow dt {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.summaryValue {
+  font-weight: 500;
+  text-align: right;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 132px;
 }
 
 .totalRow {
-  border-top: 1px dashed #d1d5db;
-  margin-top: 6px;
-  padding-top: 12px !important;
-  font-weight: 700;
+  border-top: 1px solid #dbe3ef;
+  padding-top: 16px;
+}
+
+.grandTotalValue {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #020617;
 }
 
 .totalText {
-  margin: 8px 0 16px;
-  color: #6b7280;
-  font-size: 0.85rem;
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-style: italic;
 }
 
 .toggleRow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  padding: 10px;
-  background: #f9fafb;
-  border-radius: 10px;
+  margin: 18px 0 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  color: #334155;
+}
+
+.toggleRow input {
+  width: 18px;
+  height: 18px;
 }
 
 .primaryButton {
   width: 100%;
-  background: #111827;
   color: #fff;
+  background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.18);
+}
+
+.primaryButton:hover:not(:disabled) {
+  transform: scale(1.01);
+  box-shadow: 0 12px 20px rgba(15, 23, 42, 0.24);
 }
 
 .primaryButton:disabled {
@@ -227,9 +310,9 @@
 
 .resetButton {
   width: 100%;
-  margin-top: 8px;
-  background: #f3f4f6;
-  color: #1f2937;
+  margin-top: 10px;
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .spinnerWrap {
@@ -242,7 +325,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
   animation: spin 0.8s linear infinite;
 }
@@ -264,6 +347,7 @@
 @media (max-width: 1024px) {
   .layout {
     grid-template-columns: 1fr;
+    gap: 24px;
   }
 
   .stickyCard {
@@ -278,5 +362,9 @@
 
   .grid2 {
     grid-template-columns: 1fr;
+  }
+
+  .fullWidth {
+    grid-column: span 1;
   }
 }
