@@ -38,6 +38,7 @@ export default function HomePage() {
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetSource, setBudgetSource] = useState("");
   const [assignee, setAssignee] = useState("");
+  const [assigneePosition, setAssigneePosition] = useState("");
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export default function HomePage() {
         budget_amount: budgetAmount,
         budget_source: budgetSource,
         assignee,
+        assignee_position: assigneePosition.trim(),
         items: items.map((item, index) => ({
           ...item,
           no: index + 1,
@@ -202,6 +204,16 @@ export default function HomePage() {
             type="text"
             value={assignee}
             onChange={(event) => setAssignee(event.target.value)}
+          />
+
+          <label htmlFor="assignee_position">ตำแหน่งผู้ได้รับมอบหมาย</label>
+          <input
+            id="assignee_position"
+            name="assignee_position"
+            type="text"
+            value={assigneePosition}
+            onChange={(event) => setAssigneePosition(event.target.value)}
+            placeholder="เช่น ผู้ช่วยช่าง, ช่าง, วิศวกร, หัวหน้าชุดปฏิบัติการ"
           />
 
           <h2>รายละเอียดวัสดุ</h2>
