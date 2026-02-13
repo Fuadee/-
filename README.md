@@ -84,6 +84,7 @@ Response:
 {{budget_amount}}
 {{budget_source}}
 {{assignee}}
+{{assignee_position}}
 ```
 
 สำหรับรายการวัสดุแบบวนซ้ำ (`items`) ให้ใส่:
@@ -92,6 +93,14 @@ Response:
 {#items}
 - {{name}} จำนวน {{qty}} {{unit}} ราคา {{price}} รวม {{total}}
 {/items}
+```
+
+
+ตัวอย่างการวางข้อความในเอกสาร:
+
+```text
+ผู้ได้รับมอบหมาย: {assignee}
+ตำแหน่ง: {assignee_position}
 ```
 
 > หมายเหตุ: ไม่ต้องสร้างไฟล์ template อัตโนมัติ ให้สร้างและจัดรูปแบบใน Word ด้วย placeholder ตามด้านบน
