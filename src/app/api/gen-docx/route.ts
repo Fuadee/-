@@ -57,6 +57,9 @@ type GeneratePayload = {
   purpose?: string | null;
   budget_amount?: string | null;
   budget_source?: string | null;
+  vendor_name?: string | null;
+  vendor_address?: string | null;
+  receipt_no?: string | null;
   assignee?: string | null;
   assignee_position?: string | null;
   approved_by?: string | null;
@@ -73,6 +76,9 @@ export async function POST(request: NextRequest) {
       purpose,
       budget_amount,
       budget_source,
+      vendor_name,
+      vendor_address,
+      receipt_no,
       assignee,
       assignee_position,
       approved_by,
@@ -95,6 +101,9 @@ export async function POST(request: NextRequest) {
       purpose: purpose ?? "",
       budget_amount: budget_amount ?? "",
       budget_source: budget_source ?? "",
+      vendor_name: vendor_name ?? "",
+      vendor_address: vendor_address ?? "",
+      receipt_no: receipt_no ?? "",
       assignee: assignee ?? "",
       assignee_position: assignee_position ?? "",
       approved_by: approved_by ?? "",

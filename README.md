@@ -83,6 +83,9 @@ Response:
 {{purpose}}
 {{budget_amount}}
 {{budget_source}}
+{{vendor_name}}
+{{vendor_address}}
+{{receipt_no}}
 {{assignee}}
 {{assignee_position}}
 {{approved_by}}
@@ -100,6 +103,9 @@ Response:
 ตัวอย่างการวางข้อความในเอกสาร:
 
 ```text
+บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน: {vendor_name}
+ที่อยู่: {vendor_address}
+เลขที่ใบเสร็จ: {receipt_no}
 ผู้ได้รับมอบหมาย: {assignee}
 ตำแหน่ง: {assignee_position}
 อนุมัติผ่าน: {approved_by}
