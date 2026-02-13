@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -12,10 +13,11 @@ type AuthState = {
 
 const navLinks = [
   { href: "/", label: "Generate" },
-  { href: "/doc", label: "Doc" }
+  { href: "/dashboard", label: "Dashboard" }
 ];
 
 export default function Navbar() {
+  const pathname = usePathname();
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     loading: true
@@ -61,15 +63,21 @@ export default function Navbar() {
         </Link>
 
         <nav className="hidden items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 p-1 md:flex" aria-label="Primary">
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
-            >
-              {link.label}
-            </Link>
-          ))}
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href;
+
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                  isActive ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 
 type ItemForm = {
@@ -105,6 +106,7 @@ const readThaiBaht = (value: number): string => {
 };
 
 export default function HomePage() {
+  const router = useRouter();
   const [department, setDepartment] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectDetail, setSubjectDetail] = useState("");
@@ -293,6 +295,9 @@ export default function HomePage() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+
+      const createdJobId = response.headers.get("x-job-id");
+      router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
     } catch (submitError) {
       const message =
         submitError instanceof Error
