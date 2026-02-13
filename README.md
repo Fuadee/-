@@ -148,3 +148,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
 Use values from your Supabase project settings (URL + anon public key).
+
+## Route protection
+- Site is protected globally by Supabase Auth middleware; only `/login` (and auth callback paths) is public.
+- Unauthenticated requests to other pages are redirected to `/login`.

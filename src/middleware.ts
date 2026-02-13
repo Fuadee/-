@@ -7,7 +7,28 @@ type CookieToSet = {
   options?: Record<string, unknown>;
 };
 
+const STATIC_FILE_REGEX = /\.(?:png|jpg|jpeg|webp|svg|css|js|map|txt|ico)$/i;
+
+function isPublicPath(pathname: string) {
+  return (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth/callback") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    STATIC_FILE_REGEX.test(pathname)
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublicPath(pathname)) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({
     request
   });
@@ -34,10 +55,10 @@ export async function middleware(request: NextRequest) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  if (request.nextUrl.pathname.startsWith("/doc") && !user) {
+  if (!user) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
+    redirectUrl.searchParams.set("redirectedFrom", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -45,5 +66,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/doc/:path*"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
 };
