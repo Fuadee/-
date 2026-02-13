@@ -1,0 +1,13 @@
+{
+  "department": "IT",
+  "subject": "single item",
+  "items": [
+    {
+      "name": "Printer",
+      "qty": "1",
+      "unit": "unit",
+      "price": "1000",
+      "spec": "Laser\nA4"
+    }
+  ]
+}
