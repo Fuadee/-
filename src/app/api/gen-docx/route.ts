@@ -59,6 +59,7 @@ type GeneratePayload = {
   budget_source?: string | null;
   assignee?: string | null;
   assignee_position?: string | null;
+  approved_by?: string | null;
   items?: ItemPayload[] | null;
 };
 
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       budget_source,
       assignee,
       assignee_position,
+      approved_by,
       items
     } = body;
 
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest) {
       budget_source: budget_source ?? "",
       assignee: assignee ?? "",
       assignee_position: assignee_position ?? "",
+      approved_by: approved_by ?? "",
       items: normalizeItems(items)
     });
 

@@ -39,6 +39,7 @@ export default function HomePage() {
   const [budgetSource, setBudgetSource] = useState("");
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
+  const [approvedBy, setApprovedBy] = useState("");
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,7 @@ export default function HomePage() {
         budget_source: budgetSource,
         assignee,
         assignee_position: assigneePosition.trim(),
+        approved_by: approvedBy.trim(),
         items: items.map((item, index) => ({
           ...item,
           no: index + 1,
@@ -214,6 +216,16 @@ export default function HomePage() {
             value={assigneePosition}
             onChange={(event) => setAssigneePosition(event.target.value)}
             placeholder="เช่น ผู้ช่วยช่าง, ช่าง, วิศวกร, หัวหน้าชุดปฏิบัติการ"
+          />
+
+          <label htmlFor="approved_by">อนุมัติผ่าน</label>
+          <input
+            id="approved_by"
+            name="approved_by"
+            type="text"
+            value={approvedBy}
+            onChange={(event) => setApprovedBy(event.target.value)}
+            placeholder="เช่น ผู้จัดการการไฟฟ้า / หัวหน้าส่วน / (ชื่อ-นามสกุล)"
           />
 
           <h2>รายละเอียดวัสดุ</h2>
