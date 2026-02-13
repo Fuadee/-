@@ -5,85 +5,13 @@ import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 import { NextRequest, NextResponse } from "next/server";
 
+import { buildDocxTemplateData, type GeneratePayload } from "@/lib/docxTemplateData";
+
 export const runtime = "nodejs";
-
-type ItemPayload = {
-  no?: number;
-  name?: string;
-  qty?: string;
-  unit?: string;
-  price?: string;
-  spec?: string;
-  total?: string | number;
-};
-
-const parseNumber = (value: string | number | undefined): number => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (typeof value !== "string") {
-    return 0;
-  }
-  const normalized = Number(value.replace(/,/g, "").trim());
-  return Number.isFinite(normalized) ? normalized : 0;
-};
-
-const normalizeItems = (items: ItemPayload[] | null | undefined): ItemPayload[] => {
-  if (!Array.isArray(items)) {
-    return [];
-  }
-
-  return items.map((item, index) => {
-    const qty = item.qty ?? "";
-    const price = item.price ?? "";
-    const computedTotal = parseNumber(qty) * parseNumber(price);
-
-    return {
-      no: index + 1,
-      name: item.name ?? "",
-      qty,
-      unit: item.unit ?? "",
-      price,
-      spec: item.spec ?? "",
-      total: item.total ?? computedTotal
-    };
-  });
-};
-
-type GeneratePayload = {
-  department?: string | null;
-  subject?: string | null;
-  subject_detail?: string | null;
-  purpose?: string | null;
-  budget_amount?: string | null;
-  budget_source?: string | null;
-  vendor_name?: string | null;
-  vendor_address?: string | null;
-  receipt_no?: string | null;
-  assignee?: string | null;
-  assignee_position?: string | null;
-  approved_by?: string | null;
-  items?: ItemPayload[] | null;
-};
 
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as GeneratePayload;
-    const {
-      department,
-      subject,
-      subject_detail,
-      purpose,
-      budget_amount,
-      budget_source,
-      vendor_name,
-      vendor_address,
-      receipt_no,
-      assignee,
-      assignee_position,
-      approved_by,
-      items
-    } = body;
 
     const templatePath = process.cwd() + "/templates/template.docx";
     const content = await readFile(path.resolve(templatePath), "binary");
@@ -94,21 +22,7 @@ export async function POST(request: NextRequest) {
       linebreaks: true
     });
 
-    doc.render({
-      department: department ?? "",
-      subject: subject ?? "",
-      subject_detail: subject_detail ?? "",
-      purpose: purpose ?? "",
-      budget_amount: budget_amount ?? "",
-      budget_source: budget_source ?? "",
-      vendor_name: vendor_name ?? "",
-      vendor_address: vendor_address ?? "",
-      receipt_no: receipt_no ?? "",
-      assignee: assignee ?? "",
-      assignee_position: assignee_position ?? "",
-      approved_by: approved_by ?? "",
-      items: normalizeItems(items)
-    });
+    doc.render(buildDocxTemplateData(body));
 
     const buffer = doc.getZip().generate({
       type: "uint8array",
