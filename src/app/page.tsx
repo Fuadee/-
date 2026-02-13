@@ -16,6 +16,11 @@ type ApiErrorResponse = {
   properties?: unknown;
 };
 
+type GenSpecResponse = {
+  spec?: string;
+  message?: string;
+};
+
 const createEmptyItem = (): ItemForm => ({
   no: 1,
   name: "",
@@ -41,6 +46,11 @@ export default function HomePage() {
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [itemErrors, setItemErrors] = useState<Record<number, string>>({});
+  const [generatingIndex, setGeneratingIndex] = useState<number | null>(null);
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const [generateProgress, setGenerateProgress] = useState<string | null>(null);
+  const [previousSpecs, setPreviousSpecs] = useState<Record<number, string>>({});
 
   const updateItem = (index: number, field: keyof ItemForm, value: string) => {
     setItems((prevItems) =>
@@ -65,6 +75,132 @@ export default function HomePage() {
 
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
   const grandTotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
+
+  const clearItemError = (index: number) => {
+    setItemErrors((prev) => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  const fetchSpec = async (itemName: string): Promise<string> => {
+    const response = await fetch("/api/items/gen-spec", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: itemName,
+        purpose,
+        department,
+        style: "medium"
+      })
+    });
+
+    const payload = (await response.json()) as GenSpecResponse;
+
+    if (!response.ok || !payload.spec) {
+      throw new Error(payload.message ?? "ไม่สามารถสร้างสเปกได้");
+    }
+
+    return payload.spec;
+  };
+
+  const handleGenerateSpec = async (index: number) => {
+    const item = items[index];
+    if (!item?.name.trim()) {
+      setItemErrors((prev) => ({ ...prev, [index]: "กรอกชื่อพัสดุก่อน" }));
+      return;
+    }
+
+    clearItemError(index);
+    setGeneratingIndex(index);
+    setError(null);
+
+    try {
+      const generatedSpec = await fetchSpec(item.name.trim());
+      setPreviousSpecs((prevSpecs) => ({
+        ...prevSpecs,
+        [index]: items[index]?.spec ?? ""
+      }));
+      setItems((prevItems) =>
+        prevItems.map((prevItem, itemIndex) =>
+          itemIndex === index ? { ...prevItem, spec: generatedSpec } : prevItem
+        )
+      );
+    } catch (specError) {
+      const message =
+        specError instanceof Error ? specError.message : "เกิดข้อผิดพลาดในการสร้างสเปก";
+      setError(message);
+    } finally {
+      setGeneratingIndex(null);
+    }
+  };
+
+  const handleRestoreSpec = (index: number) => {
+    if (!(index in previousSpecs)) {
+      return;
+    }
+
+    setItems((prevItems) =>
+      prevItems.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, spec: previousSpecs[index] ?? "" } : item
+      )
+    );
+  };
+
+  const handleGenerateAllSpecs = async () => {
+    setGeneratingAll(true);
+    setError(null);
+
+    const targetIndexes = items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => !item.spec.trim())
+      .map(({ index }) => index);
+
+    if (targetIndexes.length === 0) {
+      setGenerateProgress("ไม่มีรายการที่ต้องสร้างเพิ่มเติม");
+      setGeneratingAll(false);
+      return;
+    }
+
+    for (let i = 0; i < targetIndexes.length; i += 1) {
+      const index = targetIndexes[i];
+      const item = items[index];
+
+      setGenerateProgress(`${i + 1}/${targetIndexes.length}`);
+
+      if (!item?.name.trim()) {
+        setItemErrors((prev) => ({ ...prev, [index]: "กรอกชื่อพัสดุก่อน" }));
+        continue;
+      }
+
+      clearItemError(index);
+      setGeneratingIndex(index);
+
+      try {
+        const generatedSpec = await fetchSpec(item.name.trim());
+        setPreviousSpecs((prevSpecs) => ({
+          ...prevSpecs,
+          [index]: items[index]?.spec ?? ""
+        }));
+        setItems((prevItems) =>
+          prevItems.map((prevItem, itemIndex) =>
+            itemIndex === index ? { ...prevItem, spec: generatedSpec } : prevItem
+          )
+        );
+      } catch (specError) {
+        const message =
+          specError instanceof Error ? specError.message : "เกิดข้อผิดพลาดในการสร้างสเปก";
+        setError(message);
+      }
+    }
+
+    setGeneratingIndex(null);
+    setGeneratingAll(false);
+    setGenerateProgress(null);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -205,6 +341,10 @@ export default function HomePage() {
           />
 
           <h2>รายละเอียดวัสดุ</h2>
+          <button type="button" onClick={handleGenerateAllSpecs} disabled={generatingAll || loading}>
+            {generatingAll ? `กำลังสร้าง... ${generateProgress ?? ""}` : "Gen Spec ทั้งหมด"}
+          </button>
+
           {items.map((item, index) => (
             <div key={`item-${index}`}>
               <label htmlFor={`item-no-${index}`}>ลำดับ</label>
@@ -248,6 +388,26 @@ export default function HomePage() {
                 value={item.spec}
                 onChange={(event) => updateItem(index, "spec", event.target.value)}
               />
+
+              <button
+                type="button"
+                onClick={() => handleGenerateSpec(index)}
+                disabled={loading || generatingAll || generatingIndex === index}
+              >
+                {generatingIndex === index ? "กำลังสร้าง…" : "Gen Spec"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGenerateSpec(index)}
+                disabled={loading || generatingAll || generatingIndex === index}
+              >
+                รีเจน
+              </button>
+              <button type="button" onClick={() => handleRestoreSpec(index)} disabled={!(index in previousSpecs)}>
+                ย้อนไปค่าเดิม
+              </button>
+
+              {itemErrors[index] && <p className="error">{itemErrors[index]}</p>}
 
               <p>รวมรายการนี้: {itemTotal(item)}</p>
               <button type="button" onClick={() => removeItem(index)}>
