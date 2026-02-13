@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { generateSpec } from "@/lib/specGen";
 
 type ItemForm = {
   no?: number;
@@ -52,7 +51,6 @@ export default function HomePage() {
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generateProgress, setGenerateProgress] = useState<string | null>(null);
   const [previousSpecs, setPreviousSpecs] = useState<Record<number, string>>({});
-  const [localAutoMode, setLocalAutoMode] = useState(true);
 
   const updateItem = (index: number, field: keyof ItemForm, value: string) => {
     setItems((prevItems) =>
@@ -86,24 +84,14 @@ export default function HomePage() {
     });
   };
 
-  const fetchSpec = async (item: ItemForm): Promise<string> => {
-    if (localAutoMode) {
-      return generateSpec({
-        name: item.name,
-        purpose,
-        qty: parseNumber(item.qty),
-        unit: item.unit,
-        style: "medium"
-      });
-    }
-
+  const fetchSpec = async (itemName: string): Promise<string> => {
     const response = await fetch("/api/items/gen-spec", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        name: item.name,
+        name: itemName,
         purpose,
         department,
         style: "medium"
@@ -131,7 +119,7 @@ export default function HomePage() {
     setError(null);
 
     try {
-      const generatedSpec = await fetchSpec(item);
+      const generatedSpec = await fetchSpec(item.name.trim());
       setPreviousSpecs((prevSpecs) => ({
         ...prevSpecs,
         [index]: items[index]?.spec ?? ""
@@ -192,7 +180,7 @@ export default function HomePage() {
       setGeneratingIndex(index);
 
       try {
-        const generatedSpec = await fetchSpec(item);
+        const generatedSpec = await fetchSpec(item.name.trim());
         setPreviousSpecs((prevSpecs) => ({
           ...prevSpecs,
           [index]: items[index]?.spec ?? ""
@@ -353,14 +341,6 @@ export default function HomePage() {
           />
 
           <h2>รายละเอียดวัสดุ</h2>
-          <label>
-            <input
-              type="checkbox"
-              checked={localAutoMode}
-              onChange={(event) => setLocalAutoMode(event.target.checked)}
-            />{" "}
-            โหมดอัตโนมัติ (ไม่ใช้ AI)
-          </label>
           <button type="button" onClick={handleGenerateAllSpecs} disabled={generatingAll || loading}>
             {generatingAll ? `กำลังสร้าง... ${generateProgress ?? ""}` : "Gen Spec ทั้งหมด"}
           </button>
