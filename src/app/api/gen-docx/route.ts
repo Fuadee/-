@@ -8,11 +8,46 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 type ItemPayload = {
+  no?: number;
   name?: string;
   qty?: string;
   unit?: string;
   price?: string;
+  spec?: string;
   total?: string | number;
+};
+
+const parseNumber = (value: string | number | undefined): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value !== "string") {
+    return 0;
+  }
+  const normalized = Number(value.replace(/,/g, "").trim());
+  return Number.isFinite(normalized) ? normalized : 0;
+};
+
+const normalizeItems = (items: ItemPayload[] | null | undefined): ItemPayload[] => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map((item, index) => {
+    const qty = item.qty ?? "";
+    const price = item.price ?? "";
+    const computedTotal = parseNumber(qty) * parseNumber(price);
+
+    return {
+      no: index + 1,
+      name: item.name ?? "",
+      qty,
+      unit: item.unit ?? "",
+      price,
+      spec: item.spec ?? "",
+      total: item.total ?? computedTotal
+    };
+  });
 };
 
 type GeneratePayload = {
@@ -57,7 +92,7 @@ export async function POST(request: NextRequest) {
       budget_amount: budget_amount ?? "",
       budget_source: budget_source ?? "",
       assignee: assignee ?? "",
-      items: Array.isArray(items) ? items : []
+      items: normalizeItems(items)
     });
 
     const buffer = doc.getZip().generate({
@@ -70,7 +105,7 @@ export async function POST(request: NextRequest) {
     const filename = `หนังสือราชการ_${date}.docx`;
     const encodedFilename = encodeURIComponent(filename);
 
-    return new NextResponse(buffer, {
+    return new NextResponse(Buffer.from(buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",

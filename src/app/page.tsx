@@ -3,10 +3,12 @@
 import { FormEvent, useState } from "react";
 
 type ItemForm = {
+  no?: number;
   name: string;
   qty: string;
   unit: string;
   price: string;
+  spec: string;
 };
 
 type ApiErrorResponse = {
@@ -15,10 +17,12 @@ type ApiErrorResponse = {
 };
 
 const createEmptyItem = (): ItemForm => ({
+  no: 1,
   name: "",
   qty: "",
   unit: "",
-  price: ""
+  price: "",
+  spec: ""
 });
 
 const parseNumber = (value: string): number => {
@@ -76,8 +80,10 @@ export default function HomePage() {
         budget_amount: budgetAmount,
         budget_source: budgetSource,
         assignee,
-        items: items.map((item) => ({
+        items: items.map((item, index) => ({
           ...item,
+          no: index + 1,
+          spec: item.spec ?? "",
           total: itemTotal(item)
         }))
       };
@@ -201,6 +207,9 @@ export default function HomePage() {
           <h2>รายละเอียดวัสดุ</h2>
           {items.map((item, index) => (
             <div key={`item-${index}`}>
+              <label htmlFor={`item-no-${index}`}>ลำดับ</label>
+              <input id={`item-no-${index}`} type="text" value={index + 1} readOnly />
+
               <label htmlFor={`item-name-${index}`}>ชื่อวัสดุ</label>
               <input
                 id={`item-name-${index}`}
@@ -231,6 +240,13 @@ export default function HomePage() {
                 type="text"
                 value={item.price}
                 onChange={(event) => updateItem(index, "price", event.target.value)}
+              />
+
+              <label htmlFor={`item-spec-${index}`}>รายละเอียดคุณลักษณะ (spec)</label>
+              <textarea
+                id={`item-spec-${index}`}
+                value={item.spec}
+                onChange={(event) => updateItem(index, "spec", event.target.value)}
               />
 
               <p>รวมรายการนี้: {itemTotal(item)}</p>
