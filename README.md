@@ -138,3 +138,13 @@ Response:
 - ใช้ตรวจผลลัพธ์เบื้องต้นของ `formatMoneyTH`, `toThaiBahtText` และการคำนวณ VAT 7%
 
 > หมายเหตุ: ไม่ต้องสร้างไฟล์ template อัตโนมัติ ให้สร้างและจัดรูปแบบใน Word ด้วย placeholder ตามด้านบน
+
+## Supabase Auth setup (Next.js App Router)
+Add these variables to `.env.local` before running the app:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Use values from your Supabase project settings (URL + anon public key).
