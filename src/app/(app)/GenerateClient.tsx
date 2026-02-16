@@ -416,6 +416,19 @@ export default function GenerateClient() {
                 </div>
 
                 <div className={styles.field}>
+                  <label htmlFor="approved_by">อนุมัติผ่าน</label>
+                  <input
+                    id="approved_by"
+                    name="approved_by"
+                    type="text"
+                    value={approvedBy}
+                    onChange={(event) => setApprovedBy(event.target.value)}
+                    placeholder="เช่น ผู้จัดการการไฟฟ้า"
+                  />
+                  {validationErrors.approvedBy && <p className={styles.fieldError}>{validationErrors.approvedBy}</p>}
+                </div>
+
+                <div className={`${styles.field} ${styles.fullWidth}`}>
                   <label htmlFor="subject">เรื่อง</label>
                   <input
                     id="subject"
@@ -492,18 +505,6 @@ export default function GenerateClient() {
                     </div>
                   </div>
                   {validationErrors.receiptNo && <p className={styles.fieldError}>{validationErrors.receiptNo}</p>}
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="approved_by">อนุมัติผ่าน</label>
-                  <input
-                    id="approved_by"
-                    name="approved_by"
-                    type="text"
-                    value={approvedBy}
-                    onChange={(event) => setApprovedBy(event.target.value)}
-                    placeholder="เช่น ผู้จัดการการไฟฟ้า"
-                  />
-                  {validationErrors.approvedBy && <p className={styles.fieldError}>{validationErrors.approvedBy}</p>}
                 </div>
               </div>
 
