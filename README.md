@@ -105,6 +105,7 @@ Response:
 {{approved_by}}
 {{approved_by_raw}}
 {{approved_by_line}}
+{{pay_text}}
 {{subtotal_net_fmt}}
 {{vat_rate}}
 {{vat_amount_fmt}}
@@ -135,6 +136,7 @@ Response:
 อนุมัติผ่าน: {approved_by}
 อนุมัติผ่าน (raw): {approved_by_raw}
 อนุมัติผ่าน (line): {approved_by_line}
+รายละเอียดการเบิกจ่าย: {pay_text}
 ราคาสินค้า (ก่อน VAT): {subtotal_net_fmt}
 ภาษีมูลค่าเพิ่ม ({vat_rate}%): {vat_amount_fmt}
 รวมเป็นเงินทั้งสิ้น: {grand_total_fmt}

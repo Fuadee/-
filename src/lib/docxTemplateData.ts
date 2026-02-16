@@ -197,7 +197,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     approved_by_raw: approvedByRaw,
     approved_by_line: approvedByLine,
     payment_budget: paymentBudget,
-    payment_budget_doc_text: paymentBudgetDocText,
+    pay_text: paymentBudget?.doc_text ?? paymentBudgetDocText,
     items,
     vat_enabled: vatEnabled,
     vat_rate: vatRate,
