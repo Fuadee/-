@@ -448,7 +448,7 @@ export default function GenerateClient() {
     }
 
     if (paymentMethod === "loan" && !loanDocNo.trim()) {
-      errors.paymentMethodLoanDocNo = "กรุณากรอกเลขที่ใบสำคัญจ่าย";
+      errors.paymentMethodLoanDocNo = "กรุณากรอกเลขที่เงินยืม";
     }
 
     return errors;
@@ -708,52 +708,6 @@ export default function GenerateClient() {
                 )}
               </div>
 
-              <div className={styles.field}>
-                <label htmlFor="payment_method">แบบการเบิกจ่าย</label>
-                <select
-                  id="payment_method"
-                  name="payment_method"
-                  value={paymentMethod}
-                  onChange={(event) => handlePaymentMethodChange(event.target.value)}
-                >
-                  <option value="credit">เครดิต</option>
-                  <option value="advance">สำรองจ่าย</option>
-                  <option value="loan">เงินยืม</option>
-                </select>
-              </div>
-
-              {paymentMethod === "advance" ? (
-                <div className={styles.field}>
-                  <label htmlFor="assignee_emp_code">รหัสพนักงานผู้สำรองจ่าย</label>
-                  <input
-                    id="assignee_emp_code"
-                    name="assignee_emp_code"
-                    type="text"
-                    value={assigneeEmpCode}
-                    onChange={(event) => setAssigneeEmpCode(event.target.value)}
-                  />
-                  {validationErrors.paymentMethodAssigneeEmpCode && (
-                    <p className={styles.fieldError}>{validationErrors.paymentMethodAssigneeEmpCode}</p>
-                  )}
-                </div>
-              ) : null}
-
-              {paymentMethod === "loan" ? (
-                <div className={styles.field}>
-                  <label htmlFor="loan_doc_no">เลขที่ใบสำคัญจ่าย</label>
-                  <input
-                    id="loan_doc_no"
-                    name="loan_doc_no"
-                    type="text"
-                    value={loanDocNo}
-                    onChange={(event) => setLoanDocNo(event.target.value)}
-                  />
-                  {validationErrors.paymentMethodLoanDocNo && (
-                    <p className={styles.fieldError}>{validationErrors.paymentMethodLoanDocNo}</p>
-                  )}
-                </div>
-              ) : null}
-
               {!paymentBudget.type ? (
                 <p className={styles.helperText}>กรุณาเลือกประเภทการเบิกจ่ายเพื่อกรอกข้อมูลเพิ่มเติม</p>
               ) : null}
@@ -829,38 +783,86 @@ export default function GenerateClient() {
               ) : null}
 
               {paymentBudget.type ? (
-                <div className={styles.grid2}>
-                  <div className={styles.field}>
-                    <label htmlFor="payment_budget_account_code">รหัสบัญชี</label>
-                    <input
-                      id="payment_budget_account_code"
-                      name="payment_budget_account_code"
-                      type="text"
-                      value={paymentBudget.account_code}
-                      onChange={(event) =>
-                        setPaymentBudget((previous) => ({ ...previous, account_code: event.target.value }))
-                      }
-                    />
-                    {validationErrors.paymentBudgetAccountCode && (
-                      <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountCode}</p>
-                    )}
+                <>
+                  <div className={styles.grid2}>
+                    <div className={styles.field}>
+                      <label htmlFor="payment_budget_account_code">รหัสบัญชี</label>
+                      <input
+                        id="payment_budget_account_code"
+                        name="payment_budget_account_code"
+                        type="text"
+                        value={paymentBudget.account_code}
+                        onChange={(event) =>
+                          setPaymentBudget((previous) => ({ ...previous, account_code: event.target.value }))
+                        }
+                      />
+                      {validationErrors.paymentBudgetAccountCode && (
+                        <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountCode}</p>
+                      )}
+                    </div>
+                    <div className={styles.field}>
+                      <label htmlFor="payment_budget_account_name">ชื่อบัญชี</label>
+                      <input
+                        id="payment_budget_account_name"
+                        name="payment_budget_account_name"
+                        type="text"
+                        value={paymentBudget.account_name}
+                        onChange={(event) =>
+                          setPaymentBudget((previous) => ({ ...previous, account_name: event.target.value }))
+                        }
+                      />
+                      {validationErrors.paymentBudgetAccountName && (
+                        <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountName}</p>
+                      )}
+                    </div>
                   </div>
+
                   <div className={styles.field}>
-                    <label htmlFor="payment_budget_account_name">ชื่อบัญชี</label>
-                    <input
-                      id="payment_budget_account_name"
-                      name="payment_budget_account_name"
-                      type="text"
-                      value={paymentBudget.account_name}
-                      onChange={(event) =>
-                        setPaymentBudget((previous) => ({ ...previous, account_name: event.target.value }))
-                      }
-                    />
-                    {validationErrors.paymentBudgetAccountName && (
-                      <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountName}</p>
-                    )}
+                    <label htmlFor="payment_method">แบบการเบิกจ่าย</label>
+                    <select
+                      id="payment_method"
+                      name="payment_method"
+                      value={paymentMethod}
+                      onChange={(event) => handlePaymentMethodChange(event.target.value)}
+                    >
+                      <option value="credit">เครดิต</option>
+                      <option value="advance">สำรองจ่าย</option>
+                      <option value="loan">เงินยืม</option>
+                    </select>
                   </div>
-                </div>
+
+                  {paymentMethod === "advance" ? (
+                    <div className={styles.field}>
+                      <label htmlFor="assignee_emp_code">รหัสพนักงานผู้สำรองจ่าย</label>
+                      <input
+                        id="assignee_emp_code"
+                        name="assignee_emp_code"
+                        type="text"
+                        value={assigneeEmpCode}
+                        onChange={(event) => setAssigneeEmpCode(event.target.value)}
+                      />
+                      {validationErrors.paymentMethodAssigneeEmpCode && (
+                        <p className={styles.fieldError}>{validationErrors.paymentMethodAssigneeEmpCode}</p>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {paymentMethod === "loan" ? (
+                    <div className={styles.field}>
+                      <label htmlFor="loan_doc_no">เลขที่เงินยืม</label>
+                      <input
+                        id="loan_doc_no"
+                        name="loan_doc_no"
+                        type="text"
+                        value={loanDocNo}
+                        onChange={(event) => setLoanDocNo(event.target.value)}
+                      />
+                      {validationErrors.paymentMethodLoanDocNo && (
+                        <p className={styles.fieldError}>{validationErrors.paymentMethodLoanDocNo}</p>
+                      )}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
             </section>
