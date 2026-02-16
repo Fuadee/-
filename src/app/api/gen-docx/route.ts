@@ -17,6 +17,11 @@ type GenerateRequestBody = GeneratePayload & {
 
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
 
+const toNullableTrimmedString = (value: string | null | undefined) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
 const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>) => {
   const writeData: Record<string, unknown> = {};
 
@@ -26,6 +31,13 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   if (availableColumns.has("department")) writeData.department = body.department?.trim() ?? null;
   if (availableColumns.has("subject")) writeData.subject = body.subject?.trim() ?? null;
   if (availableColumns.has("receipt_date")) writeData.receipt_date = body.receipt_date || null;
+  if (availableColumns.has("payment_method")) writeData.payment_method = body.payment_method ?? "credit";
+  if (availableColumns.has("assignee_emp_code")) {
+    writeData.assignee_emp_code = toNullableTrimmedString(body.assignee_emp_code);
+  }
+  if (availableColumns.has("loan_doc_no")) {
+    writeData.loan_doc_no = toNullableTrimmedString(body.loan_doc_no);
+  }
   if (availableColumns.has("status")) writeData.status = "generated";
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();

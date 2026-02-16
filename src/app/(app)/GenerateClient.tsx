@@ -33,6 +33,8 @@ type JobResponse = {
   message?: string;
 };
 
+type PaymentMethod = "credit" | "advance" | "loan";
+
 type ValidationErrors = {
   department?: string;
   subject?: string;
@@ -49,6 +51,8 @@ type ValidationErrors = {
   paymentBudgetAccountCode?: string;
   paymentBudgetAccountName?: string;
   approvedBy?: string;
+  paymentMethodAssigneeEmpCode?: string;
+  paymentMethodLoanDocNo?: string;
   items?: string[];
 };
 
@@ -163,6 +167,9 @@ export default function GenerateClient() {
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
   const [approvedBy, setApprovedBy] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
+  const [assigneeEmpCode, setAssigneeEmpCode] = useState("");
+  const [loanDocNo, setLoanDocNo] = useState("");
   const [paymentBudget, setPaymentBudget] = useState<PaymentBudgetForm>(createEmptyPaymentBudgetForm());
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
@@ -203,6 +210,30 @@ export default function GenerateClient() {
         setAssignee(typeof payload.assignee === "string" ? payload.assignee : "");
         setAssigneePosition(typeof payload.assignee_position === "string" ? payload.assignee_position : "");
         setApprovedBy(typeof payload.approved_by === "string" ? payload.approved_by : "");
+
+        const methodValue =
+          payload.payment_method ?? (typeof job.payment_method === "string" ? job.payment_method : null);
+        const normalizedPaymentMethod: PaymentMethod =
+          methodValue === "advance" || methodValue === "loan" || methodValue === "credit"
+            ? methodValue
+            : "credit";
+        setPaymentMethod(normalizedPaymentMethod);
+
+        const assigneeEmpCodeValue =
+          typeof payload.assignee_emp_code === "string"
+            ? payload.assignee_emp_code
+            : typeof job.assignee_emp_code === "string"
+              ? job.assignee_emp_code
+              : "";
+        const loanDocNoValue =
+          typeof payload.loan_doc_no === "string"
+            ? payload.loan_doc_no
+            : typeof job.loan_doc_no === "string"
+              ? job.loan_doc_no
+              : "";
+
+        setAssigneeEmpCode(normalizedPaymentMethod === "advance" ? assigneeEmpCodeValue : "");
+        setLoanDocNo(normalizedPaymentMethod === "loan" ? loanDocNoValue : "");
 
         const normalizedPaymentBudget = normalizePaymentBudget(payload.payment_budget);
         if (normalizedPaymentBudget) {
@@ -283,6 +314,9 @@ export default function GenerateClient() {
     setAssignee("");
     setAssigneePosition("");
     setApprovedBy("");
+    setPaymentMethod("credit");
+    setAssigneeEmpCode("");
+    setLoanDocNo("");
     setPaymentBudget(createEmptyPaymentBudgetForm());
     setItems([createEmptyItem()]);
     setError(null);
@@ -362,6 +396,21 @@ export default function GenerateClient() {
     }));
   };
 
+  const handlePaymentMethodChange = (value: string) => {
+    const normalizedValue: PaymentMethod =
+      value === "advance" || value === "loan" || value === "credit" ? value : "credit";
+
+    setPaymentMethod(normalizedValue);
+
+    if (normalizedValue !== "advance") {
+      setAssigneeEmpCode("");
+    }
+
+    if (normalizedValue !== "loan") {
+      setLoanDocNo("");
+    }
+  };
+
   const validateForm = (): ValidationErrors => {
     const errors: ValidationErrors = {
       items: itemErrors
@@ -394,6 +443,14 @@ export default function GenerateClient() {
       if (!paymentBudget.account_name.trim()) errors.paymentBudgetAccountName = "กรุณากรอกชื่อบัญชี";
     }
 
+    if (paymentMethod === "advance" && !assigneeEmpCode.trim()) {
+      errors.paymentMethodAssigneeEmpCode = "กรุณากรอกรหัสพนักงานผู้สำรองจ่าย";
+    }
+
+    if (paymentMethod === "loan" && !loanDocNo.trim()) {
+      errors.paymentMethodLoanDocNo = "กรุณากรอกเลขที่ใบสำคัญจ่าย";
+    }
+
     return errors;
   };
 
@@ -413,6 +470,8 @@ export default function GenerateClient() {
         errors.paymentBudgetNetworkNo ||
         errors.paymentBudgetAccountCode ||
         errors.paymentBudgetAccountName ||
+        errors.paymentMethodAssigneeEmpCode ||
+        errors.paymentMethodLoanDocNo ||
         errors.items?.some(Boolean)
     );
   };
@@ -444,6 +503,9 @@ export default function GenerateClient() {
         assignee: assignee.trim(),
         assignee_position: assigneePosition.trim(),
         approved_by: approvedBy.trim(),
+        payment_method: paymentMethod,
+        assignee_emp_code: paymentMethod === "advance" ? assigneeEmpCode.trim() || null : null,
+        loan_doc_no: paymentMethod === "loan" ? loanDocNo.trim() || null : null,
         payment_budget: paymentBudgetPayload,
         items: items.map((item, index) => ({
           ...item,
@@ -645,6 +707,52 @@ export default function GenerateClient() {
                   <p className={styles.fieldError}>{validationErrors.paymentBudgetType}</p>
                 )}
               </div>
+
+              <div className={styles.field}>
+                <label htmlFor="payment_method">แบบการเบิกจ่าย</label>
+                <select
+                  id="payment_method"
+                  name="payment_method"
+                  value={paymentMethod}
+                  onChange={(event) => handlePaymentMethodChange(event.target.value)}
+                >
+                  <option value="credit">เครดิต</option>
+                  <option value="advance">สำรองจ่าย</option>
+                  <option value="loan">เงินยืม</option>
+                </select>
+              </div>
+
+              {paymentMethod === "advance" ? (
+                <div className={styles.field}>
+                  <label htmlFor="assignee_emp_code">รหัสพนักงานผู้สำรองจ่าย</label>
+                  <input
+                    id="assignee_emp_code"
+                    name="assignee_emp_code"
+                    type="text"
+                    value={assigneeEmpCode}
+                    onChange={(event) => setAssigneeEmpCode(event.target.value)}
+                  />
+                  {validationErrors.paymentMethodAssigneeEmpCode && (
+                    <p className={styles.fieldError}>{validationErrors.paymentMethodAssigneeEmpCode}</p>
+                  )}
+                </div>
+              ) : null}
+
+              {paymentMethod === "loan" ? (
+                <div className={styles.field}>
+                  <label htmlFor="loan_doc_no">เลขที่ใบสำคัญจ่าย</label>
+                  <input
+                    id="loan_doc_no"
+                    name="loan_doc_no"
+                    type="text"
+                    value={loanDocNo}
+                    onChange={(event) => setLoanDocNo(event.target.value)}
+                  />
+                  {validationErrors.paymentMethodLoanDocNo && (
+                    <p className={styles.fieldError}>{validationErrors.paymentMethodLoanDocNo}</p>
+                  )}
+                </div>
+              ) : null}
 
               {!paymentBudget.type ? (
                 <p className={styles.helperText}>กรุณาเลือกประเภทการเบิกจ่ายเพื่อกรอกข้อมูลเพิ่มเติม</p>
