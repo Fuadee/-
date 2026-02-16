@@ -123,6 +123,7 @@ export default function GenerateClient() {
   const [vendorName, setVendorName] = useState("");
   const [vendorAddress, setVendorAddress] = useState("");
   const [receiptNo, setReceiptNo] = useState("");
+  const [receiptDate, setReceiptDate] = useState("");
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
   const [approvedBy, setApprovedBy] = useState("");
@@ -161,6 +162,7 @@ export default function GenerateClient() {
         setVendorName(typeof payload.vendor_name === "string" ? payload.vendor_name : "");
         setVendorAddress(typeof payload.vendor_address === "string" ? payload.vendor_address : "");
         setReceiptNo(typeof payload.receipt_no === "string" ? payload.receipt_no : "");
+        setReceiptDate(typeof payload.receipt_date === "string" ? payload.receipt_date : "");
         setAssignee(typeof payload.assignee === "string" ? payload.assignee : "");
         setAssigneePosition(typeof payload.assignee_position === "string" ? payload.assignee_position : "");
         setApprovedBy(typeof payload.approved_by === "string" ? payload.approved_by : "");
@@ -225,6 +227,7 @@ export default function GenerateClient() {
     setVendorName("");
     setVendorAddress("");
     setReceiptNo("");
+    setReceiptDate("");
     setAssignee("");
     setAssigneePosition("");
     setApprovedBy("");
@@ -311,6 +314,7 @@ export default function GenerateClient() {
         vendor_name: vendorName.trim(),
         vendor_address: vendorAddress.trim(),
         receipt_no: receiptNo.trim(),
+        receipt_date: receiptDate || null,
         assignee: assignee.trim(),
         assignee_position: assigneePosition.trim(),
         approved_by: approvedBy.trim(),
@@ -463,16 +467,30 @@ export default function GenerateClient() {
                   /> */}
                   {validationErrors.budgetAmount && <p className={styles.fieldError}>{validationErrors.budgetAmount}</p>}
                 </div>
-                <div className={styles.field}>
-                  <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
-                  <input
-                    id="receipt_no"
-                    name="receipt_no"
-                    type="text"
-                    value={receiptNo}
-                    onChange={(event) => setReceiptNo(event.target.value)}
-                    placeholder="เช่น INV-2024-001"
-                  />
+                <div className={`${styles.field} ${styles.fullWidth}`}>
+                  <div className={styles.receiptRow}>
+                    <div className={styles.fieldNoMargin}>
+                      <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
+                      <input
+                        id="receipt_no"
+                        name="receipt_no"
+                        type="text"
+                        value={receiptNo}
+                        onChange={(event) => setReceiptNo(event.target.value)}
+                        placeholder="เช่น INV-2024-001"
+                      />
+                    </div>
+                    <div className={styles.fieldNoMargin}>
+                      <label htmlFor="receipt_date">วันที่ใบเสร็จ</label>
+                      <input
+                        id="receipt_date"
+                        name="receipt_date"
+                        type="date"
+                        value={receiptDate}
+                        onChange={(event) => setReceiptDate(event.target.value)}
+                      />
+                    </div>
+                  </div>
                   {validationErrors.receiptNo && <p className={styles.fieldError}>{validationErrors.receiptNo}</p>}
                 </div>
                 <div className={styles.field}>

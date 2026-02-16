@@ -25,6 +25,7 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   if (availableColumns.has("name")) writeData.name = deriveTitle(body);
   if (availableColumns.has("department")) writeData.department = body.department?.trim() ?? null;
   if (availableColumns.has("subject")) writeData.subject = body.subject?.trim() ?? null;
+  if (availableColumns.has("receipt_date")) writeData.receipt_date = body.receipt_date || null;
   if (availableColumns.has("status")) writeData.status = "generated";
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();

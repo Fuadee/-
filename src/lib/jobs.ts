@@ -10,6 +10,7 @@ const COLUMN_PROBE_CANDIDATES = [
   "name",
   "department",
   "subject",
+  "receipt_date",
   "created_at",
   "status",
   "doc_url",

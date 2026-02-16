@@ -106,6 +106,16 @@
   margin-bottom: 14px;
 }
 
+.fieldNoMargin {
+  margin-bottom: 0;
+}
+
+.receiptRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
 .field label {
   display: block;
   font-size: 0.8rem;
@@ -401,6 +411,10 @@
 
 @media (max-width: 1024px) {
   .summaryBottomGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .receiptRow {
     grid-template-columns: 1fr;
   }
 }
