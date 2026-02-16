@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  buildPaymentBudgetDocText,
+  getOperatingCostCenter,
+  isPaymentBudgetType,
+  normalizePaymentBudget,
+  OPERATING_ORG_OPTIONS,
+  type PaymentBudget,
+  type PaymentBudgetType
+} from "@/lib/paymentBudget";
 import styles from "./page.module.css";
 
 type ItemForm = {
@@ -33,9 +42,35 @@ type ValidationErrors = {
   vendorAddress?: string;
   receiptNo?: string;
   receiptDate?: string;
+  paymentBudgetType?: string;
+  paymentBudgetOrg?: string;
+  paymentBudgetPoNo?: string;
+  paymentBudgetNetworkNo?: string;
+  paymentBudgetAccountCode?: string;
+  paymentBudgetAccountName?: string;
   approvedBy?: string;
   items?: string[];
 };
+
+type PaymentBudgetForm = {
+  type?: PaymentBudgetType;
+  org_label?: string;
+  cost_center?: string;
+  po_no?: string;
+  network_no?: string;
+  account_code: string;
+  account_name: string;
+};
+
+const createEmptyPaymentBudgetForm = (type?: PaymentBudgetType): PaymentBudgetForm => ({
+  type,
+  org_label: "",
+  cost_center: "",
+  po_no: "",
+  network_no: "",
+  account_code: "",
+  account_name: ""
+});
 
 const createEmptyItem = (): ItemForm => ({
   no: 1,
@@ -128,6 +163,7 @@ export default function GenerateClient() {
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
   const [approvedBy, setApprovedBy] = useState("");
+  const [paymentBudget, setPaymentBudget] = useState<PaymentBudgetForm>(createEmptyPaymentBudgetForm());
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
@@ -167,6 +203,21 @@ export default function GenerateClient() {
         setAssignee(typeof payload.assignee === "string" ? payload.assignee : "");
         setAssigneePosition(typeof payload.assignee_position === "string" ? payload.assignee_position : "");
         setApprovedBy(typeof payload.approved_by === "string" ? payload.approved_by : "");
+
+        const normalizedPaymentBudget = normalizePaymentBudget(payload.payment_budget);
+        if (normalizedPaymentBudget) {
+          setPaymentBudget({
+            type: normalizedPaymentBudget.type,
+            org_label: normalizedPaymentBudget.org_label ?? "",
+            cost_center: normalizedPaymentBudget.cost_center ?? "",
+            po_no: normalizedPaymentBudget.po_no ?? "",
+            network_no: normalizedPaymentBudget.network_no ?? "",
+            account_code: normalizedPaymentBudget.account_code,
+            account_name: normalizedPaymentBudget.account_name
+          });
+        } else {
+          setPaymentBudget(createEmptyPaymentBudgetForm());
+        }
 
         const parsedItems = Array.isArray(payload.items)
           ? payload.items.map((item, index) => {
@@ -232,6 +283,7 @@ export default function GenerateClient() {
     setAssignee("");
     setAssigneePosition("");
     setApprovedBy("");
+    setPaymentBudget(createEmptyPaymentBudgetForm());
     setItems([createEmptyItem()]);
     setError(null);
     setValidationErrors({});
@@ -262,6 +314,54 @@ export default function GenerateClient() {
     [items]
   );
 
+  const paymentBudgetDocText = useMemo(
+    () =>
+      buildPaymentBudgetDocText({
+        type: paymentBudget.type,
+        org_label: paymentBudget.org_label,
+        cost_center: paymentBudget.cost_center,
+        po_no: paymentBudget.po_no,
+        network_no: paymentBudget.network_no,
+        account_code: paymentBudget.account_code,
+        account_name: paymentBudget.account_name
+      }),
+    [paymentBudget]
+  );
+
+  const paymentBudgetPayload = useMemo<PaymentBudget | null>(() => {
+    if (!paymentBudget.type) {
+      return null;
+    }
+
+    return {
+      type: paymentBudget.type,
+      org_label: paymentBudget.org_label?.trim() || undefined,
+      cost_center: paymentBudget.cost_center?.trim() || undefined,
+      po_no: paymentBudget.po_no?.trim() || undefined,
+      network_no: paymentBudget.network_no?.trim() || undefined,
+      account_code: paymentBudget.account_code.trim(),
+      account_name: paymentBudget.account_name.trim(),
+      doc_text: paymentBudgetDocText
+    };
+  }, [paymentBudget, paymentBudgetDocText]);
+
+  const handlePaymentBudgetTypeChange = (value: string) => {
+    if (!isPaymentBudgetType(value)) {
+      setPaymentBudget(createEmptyPaymentBudgetForm());
+      return;
+    }
+
+    setPaymentBudget(createEmptyPaymentBudgetForm(value));
+  };
+
+  const handleOperatingOrgChange = (orgLabel: string) => {
+    setPaymentBudget((previous) => ({
+      ...previous,
+      org_label: orgLabel,
+      cost_center: getOperatingCostCenter(orgLabel)
+    }));
+  };
+
   const validateForm = (): ValidationErrors => {
     const errors: ValidationErrors = {
       items: itemErrors
@@ -274,8 +374,25 @@ export default function GenerateClient() {
     if (!vendorAddress.trim()) errors.vendorAddress = "กรุณากรอกที่อยู่ผู้ขาย";
     if (!receiptNo.trim()) errors.receiptNo = "กรุณากรอกเลขที่ใบเสร็จ";
     if (!receiptDate.trim()) errors.receiptDate = "กรุณากรอกวันที่ใบเสร็จ";
-    
-   
+
+    if (!paymentBudget.type) {
+      errors.paymentBudgetType = "กรุณาเลือกประเภทการเบิกจ่าย";
+    } else {
+      if (paymentBudget.type === "operating") {
+        if (!paymentBudget.org_label?.trim()) errors.paymentBudgetOrg = "กรุณาเลือกสังกัด";
+      }
+
+      if (paymentBudget.type === "po" && !paymentBudget.po_no?.trim()) {
+        errors.paymentBudgetPoNo = "กรุณากรอกเลขที่ใบสั่ง";
+      }
+
+      if (paymentBudget.type === "network" && !paymentBudget.network_no?.trim()) {
+        errors.paymentBudgetNetworkNo = "กรุณากรอกเลขที่โครงข่าย";
+      }
+
+      if (!paymentBudget.account_code.trim()) errors.paymentBudgetAccountCode = "กรุณากรอกรหัสบัญชี";
+      if (!paymentBudget.account_name.trim()) errors.paymentBudgetAccountName = "กรุณากรอกชื่อบัญชี";
+    }
 
     return errors;
   };
@@ -290,6 +407,12 @@ export default function GenerateClient() {
         errors.vendorAddress ||
         errors.receiptNo ||
         errors.receiptDate ||
+        errors.paymentBudgetType ||
+        errors.paymentBudgetOrg ||
+        errors.paymentBudgetPoNo ||
+        errors.paymentBudgetNetworkNo ||
+        errors.paymentBudgetAccountCode ||
+        errors.paymentBudgetAccountName ||
         errors.items?.some(Boolean)
     );
   };
@@ -321,6 +444,7 @@ export default function GenerateClient() {
         assignee: assignee.trim(),
         assignee_position: assigneePosition.trim(),
         approved_by: approvedBy.trim(),
+        payment_budget: paymentBudgetPayload,
         items: items.map((item, index) => ({
           ...item,
           no: index + 1,
@@ -499,6 +623,148 @@ export default function GenerateClient() {
                     placeholder="วศก.6 ผปบ.กฟจ.กระบี่"
                   />
                 </div>
+              </div>
+            </section>
+
+            <section className={styles.card}>
+              <h2 className={styles.sectionTitle}>รายละเอียดประเภทการเบิกจ่าย</h2>
+              <div className={styles.field}>
+                <label htmlFor="payment_budget_type">เลือกประเภทการเบิกจ่าย</label>
+                <select
+                  id="payment_budget_type"
+                  name="payment_budget_type"
+                  value={paymentBudget.type ?? ""}
+                  onChange={(event) => handlePaymentBudgetTypeChange(event.target.value)}
+                >
+                  <option value="">-- กรุณาเลือกประเภท --</option>
+                  <option value="operating">งบทำการ</option>
+                  <option value="po">งบใบสั่งงาน</option>
+                  <option value="network">งบหมายเลขงาน (งบโครงข่าย)</option>
+                </select>
+                {validationErrors.paymentBudgetType && (
+                  <p className={styles.fieldError}>{validationErrors.paymentBudgetType}</p>
+                )}
+              </div>
+
+              {!paymentBudget.type ? (
+                <p className={styles.helperText}>กรุณาเลือกประเภทการเบิกจ่ายเพื่อกรอกข้อมูลเพิ่มเติม</p>
+              ) : null}
+
+              {paymentBudget.type === "operating" ? (
+                <div className={styles.grid2}>
+                  <div className={styles.field}>
+                    <label htmlFor="payment_budget_org_label">สังกัด</label>
+                    <select
+                      id="payment_budget_org_label"
+                      name="payment_budget_org_label"
+                      value={paymentBudget.org_label ?? ""}
+                      onChange={(event) => handleOperatingOrgChange(event.target.value)}
+                    >
+                      <option value="">-- เลือกสังกัด --</option>
+                      {OPERATING_ORG_OPTIONS.map((option) => (
+                        <option key={option.label} value={option.label}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.paymentBudgetOrg && (
+                      <p className={styles.fieldError}>{validationErrors.paymentBudgetOrg}</p>
+                    )}
+                  </div>
+                  <div className={styles.field}>
+                    <label htmlFor="payment_budget_cost_center">ศูนย์ต้นทุน</label>
+                    <input
+                      id="payment_budget_cost_center"
+                      name="payment_budget_cost_center"
+                      type="text"
+                      value={paymentBudget.cost_center ?? ""}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {paymentBudget.type === "po" ? (
+                <div className={styles.field}>
+                  <label htmlFor="payment_budget_po_no">เลขที่ใบสั่ง</label>
+                  <input
+                    id="payment_budget_po_no"
+                    name="payment_budget_po_no"
+                    type="text"
+                    value={paymentBudget.po_no ?? ""}
+                    onChange={(event) =>
+                      setPaymentBudget((previous) => ({ ...previous, po_no: event.target.value }))
+                    }
+                  />
+                  {validationErrors.paymentBudgetPoNo && (
+                    <p className={styles.fieldError}>{validationErrors.paymentBudgetPoNo}</p>
+                  )}
+                </div>
+              ) : null}
+
+              {paymentBudget.type === "network" ? (
+                <div className={styles.field}>
+                  <label htmlFor="payment_budget_network_no">เลขที่โครงข่าย</label>
+                  <input
+                    id="payment_budget_network_no"
+                    name="payment_budget_network_no"
+                    type="text"
+                    value={paymentBudget.network_no ?? ""}
+                    onChange={(event) =>
+                      setPaymentBudget((previous) => ({ ...previous, network_no: event.target.value }))
+                    }
+                  />
+                  {validationErrors.paymentBudgetNetworkNo && (
+                    <p className={styles.fieldError}>{validationErrors.paymentBudgetNetworkNo}</p>
+                  )}
+                </div>
+              ) : null}
+
+              {paymentBudget.type ? (
+                <div className={styles.grid2}>
+                  <div className={styles.field}>
+                    <label htmlFor="payment_budget_account_code">รหัสบัญชี</label>
+                    <input
+                      id="payment_budget_account_code"
+                      name="payment_budget_account_code"
+                      type="text"
+                      value={paymentBudget.account_code}
+                      onChange={(event) =>
+                        setPaymentBudget((previous) => ({ ...previous, account_code: event.target.value }))
+                      }
+                    />
+                    {validationErrors.paymentBudgetAccountCode && (
+                      <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountCode}</p>
+                    )}
+                  </div>
+                  <div className={styles.field}>
+                    <label htmlFor="payment_budget_account_name">ชื่อบัญชี</label>
+                    <input
+                      id="payment_budget_account_name"
+                      name="payment_budget_account_name"
+                      type="text"
+                      value={paymentBudget.account_name}
+                      onChange={(event) =>
+                        setPaymentBudget((previous) => ({ ...previous, account_name: event.target.value }))
+                      }
+                    />
+                    {validationErrors.paymentBudgetAccountName && (
+                      <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountName}</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className={styles.field}>
+                <label htmlFor="payment_budget_doc_preview">Preview ข้อความสำหรับ DOC</label>
+                <textarea
+                  id="payment_budget_doc_preview"
+                  name="payment_budget_doc_preview"
+                  rows={2}
+                  value={paymentBudgetDocText}
+                  readOnly
+                  placeholder="ข้อความจะถูกสร้างอัตโนมัติเมื่อกรอกข้อมูลครบ"
+                />
               </div>
             </section>
 

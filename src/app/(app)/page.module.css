@@ -125,6 +125,7 @@
 }
 
 .field input,
+.field select,
 .field textarea,
 .table input,
 .table textarea {
@@ -139,6 +140,7 @@
 }
 
 .field input,
+.field select,
 .table input {
   min-height: 44px;
 }
@@ -149,6 +151,7 @@
 }
 
 .field input:focus,
+.field select:focus,
 .field textarea:focus,
 .table input:focus,
 .table textarea:focus {
@@ -162,6 +165,12 @@
   margin: 5px 0 0;
   color: #be123c;
   font-size: 0.8rem;
+}
+
+.helperText {
+  margin: 4px 0 14px;
+  color: #64748b;
+  font-size: 0.84rem;
 }
 
 .sectionHead {

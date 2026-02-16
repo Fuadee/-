@@ -1,4 +1,5 @@
 import { formatMoneyTH, toNumber } from "@/lib/money";
+import { buildPaymentBudgetDocText, normalizePaymentBudget, type PaymentBudget } from "@/lib/paymentBudget";
 import { toThaiBahtText } from "@/lib/thaiBahtText";
 
 export type ItemPayload = {
@@ -25,6 +26,7 @@ export type GeneratePayload = {
   assignee?: string | null;
   assignee_position?: string | null;
   approved_by?: string | null;
+  payment_budget?: PaymentBudget | null;
   items?: ItemPayload[] | null;
   vat_enabled?: boolean | null;
   vat_rate?: number | string | null;
@@ -139,6 +141,16 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const receiptDate = formatThaiDateBE(body.receipt_date);
   const approvedByRaw = body.approved_by?.trim() ?? "";
   const approvedByLine = approvedByRaw ? `ผ่าน ${approvedByRaw}` : "";
+  const paymentBudget = normalizePaymentBudget(body.payment_budget);
+  const paymentBudgetDocText = paymentBudget?.doc_text || buildPaymentBudgetDocText({
+    type: body.payment_budget?.type,
+    org_label: body.payment_budget?.org_label,
+    cost_center: body.payment_budget?.cost_center,
+    po_no: body.payment_budget?.po_no,
+    network_no: body.payment_budget?.network_no,
+    account_code: body.payment_budget?.account_code,
+    account_name: body.payment_budget?.account_name
+  });
   const normalizedItems = normalizeItems(body.items);
   const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
   const vatEnabled = body.vat_enabled ?? true;
@@ -184,6 +196,8 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     approved_by: approvedByLine,
     approved_by_raw: approvedByRaw,
     approved_by_line: approvedByLine,
+    payment_budget: paymentBudget,
+    payment_budget_doc_text: paymentBudgetDocText,
     items,
     vat_enabled: vatEnabled,
     vat_rate: vatRate,
