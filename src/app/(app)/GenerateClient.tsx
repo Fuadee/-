@@ -32,6 +32,7 @@ type ValidationErrors = {
   vendorName?: string;
   vendorAddress?: string;
   receiptNo?: string;
+  receiptDate?: string;
   approvedBy?: string;
   items?: string[];
 };
@@ -272,7 +273,9 @@ export default function GenerateClient() {
     if (!vendorName.trim()) errors.vendorName = "กรุณากรอกชื่อผู้ขาย";
     if (!vendorAddress.trim()) errors.vendorAddress = "กรุณากรอกที่อยู่ผู้ขาย";
     if (!receiptNo.trim()) errors.receiptNo = "กรุณากรอกเลขที่ใบเสร็จ";
-    if (!approvedBy.trim()) errors.approvedBy = "กรุณากรอกผู้อนุมัติ";
+    if (!receiptDate.trim()) errors.receiptDate = "กรุณากรอกวันที่ใบเสร็จ";
+    
+   
 
     return errors;
   };
@@ -286,7 +289,7 @@ export default function GenerateClient() {
         errors.vendorName ||
         errors.vendorAddress ||
         errors.receiptNo ||
-        errors.approvedBy ||
+        errors.receiptDate ||
         errors.items?.some(Boolean)
     );
   };
@@ -314,7 +317,7 @@ export default function GenerateClient() {
         vendor_name: vendorName.trim(),
         vendor_address: vendorAddress.trim(),
         receipt_no: receiptNo.trim(),
-        receipt_date: receiptDate || null,
+        receipt_date: receiptDate.trim(),
         assignee: assignee.trim(),
         assignee_position: assigneePosition.trim(),
         approved_by: approvedBy.trim(),
@@ -402,6 +405,50 @@ export default function GenerateClient() {
           <div className={styles.mainColumn}>
             <section className={styles.card}>
               <h2 className={styles.sectionTitle}>ข้อมูลเรื่อง</h2>
+
+
+
+              <div className={`${styles.field} ${styles.fullWidth}`}>
+                  <label htmlFor="subject">เรื่อง</label>
+                  <input
+                    id="subject"
+                    name="subject"
+                    type="text"
+                    value={subject}
+                    onChange={(event) => setSubject(event.target.value)}
+                    placeholder="กรวยกระดาษ"
+                  />
+                  {validationErrors.subject && <p className={styles.fieldError}>{validationErrors.subject}</p>}
+                </div>
+
+
+
+
+
+              <div className={styles.field}>
+                <label htmlFor="subject_detail">รายละเอียดเรื่อง</label>
+                <textarea
+                  id="subject_detail"
+                  name="subject_detail"
+                  rows={3}
+                  value={subjectDetail}
+                  onChange={(event) => setSubjectDetail(event.target.value)}
+                  placeholder="รายละเอียดสินค้า เช่น กรวยกระดาษ"
+                />
+              </div>
+
+              <div className={styles.field}>
+                <label htmlFor="purpose">เพื่อ</label>
+                <textarea
+                  id="purpose"
+                  name="purpose"
+                  rows={3}
+                  value={purpose}
+                  onChange={(event) => setPurpose(event.target.value)}
+                  placeholder="ดำเนินการโครงการศูนย์ราชการสะดวก GECC โดยต้องมีการจัดทำน้ำดื่มให้ผู้บริการผู้ใช้ไฟฟ้า บริเวณ Front Office ชั้น 1 สำหรับรองรับลูกค้าและผู้มาติดต่องาน"
+                />
+                {validationErrors.purpose && <p className={styles.fieldError}>{validationErrors.purpose}</p>}
+              </div>
               <div className={styles.grid2}>
                 <div className={styles.field}>
                   <label htmlFor="department">แผนก</label>
@@ -411,6 +458,7 @@ export default function GenerateClient() {
                     type="text"
                     value={department}
                     onChange={(event) => setDepartment(event.target.value)}
+                    placeholder="ผปบ.กฟจ.กระบี่"
                   />
                   {validationErrors.department && <p className={styles.fieldError}>{validationErrors.department}</p>}
                 </div>
@@ -423,46 +471,34 @@ export default function GenerateClient() {
                     type="text"
                     value={approvedBy}
                     onChange={(event) => setApprovedBy(event.target.value)}
-                    placeholder="เช่น ผู้จัดการการไฟฟ้า"
+                    placeholder="เช่น หผ.ปบ หรือ ว่าง"
                   />
                   {validationErrors.approvedBy && <p className={styles.fieldError}>{validationErrors.approvedBy}</p>}
                 </div>
-
-                <div className={`${styles.field} ${styles.fullWidth}`}>
-                  <label htmlFor="subject">เรื่อง</label>
+              </div>
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="assignee">ผู้ได้รับมอบหมาย</label>
                   <input
-                    id="subject"
-                    name="subject"
+                    id="assignee"
+                    name="assignee"
                     type="text"
-                    value={subject}
-                    onChange={(event) => setSubject(event.target.value)}
-                    placeholder="กรอกชื่อเรื่อง"
+                    value={assignee}
+                    onChange={(event) => setAssignee(event.target.value)}
+                    placeholder="นายชลินทร  ชุสุคนธ์"
                   />
-                  {validationErrors.subject && <p className={styles.fieldError}>{validationErrors.subject}</p>}
                 </div>
-              </div>
-
-              <div className={styles.field}>
-                <label htmlFor="subject_detail">รายละเอียดเรื่อง</label>
-                <textarea
-                  id="subject_detail"
-                  name="subject_detail"
-                  rows={3}
-                  value={subjectDetail}
-                  onChange={(event) => setSubjectDetail(event.target.value)}
-                />
-              </div>
-
-              <div className={styles.field}>
-                <label htmlFor="purpose">เพื่อ</label>
-                <textarea
-                  id="purpose"
-                  name="purpose"
-                  rows={3}
-                  value={purpose}
-                  onChange={(event) => setPurpose(event.target.value)}
-                />
-                {validationErrors.purpose && <p className={styles.fieldError}>{validationErrors.purpose}</p>}
+                <div className={styles.field}>
+                  <label htmlFor="assignee_position">ตำแหน่งผู้ได้รับมอบหมาย</label>
+                  <input
+                    id="assignee_position"
+                    name="assignee_position"
+                    type="text"
+                    value={assigneePosition}
+                    onChange={(event) => setAssigneePosition(event.target.value)}
+                    placeholder="วศก.6 ผปบ.กฟจ.กระบี่"
+                  />
+                </div>
               </div>
             </section>
 
@@ -482,28 +518,38 @@ export default function GenerateClient() {
                 </div>
                 <div className={`${styles.field} ${styles.fullWidth}`}>
                   <div className={styles.receiptRow}>
-                    <div className={styles.fieldNoMargin}>
-                      <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
-                      <input
-                        id="receipt_no"
-                        name="receipt_no"
-                        type="text"
-                        value={receiptNo}
-                        onChange={(event) => setReceiptNo(event.target.value)}
-                        placeholder="เช่น INV-2024-001"
-                      />
-                    </div>
-                    <div className={styles.fieldNoMargin}>
-                      <label htmlFor="receipt_date">วันที่ใบเสร็จ</label>
-                      <input
-                        id="receipt_date"
-                        name="receipt_date"
-                        type="date"
-                        value={receiptDate}
-                        onChange={(event) => setReceiptDate(event.target.value)}
-                      />
-                    </div>
-                  </div>
+  <div className={styles.fieldNoMargin}>
+    <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
+    <input
+      id="receipt_no"
+      name="receipt_no"
+      type="text"
+      value={receiptNo}
+      onChange={(event) => setReceiptNo(event.target.value)}
+      placeholder="เช่น INV-2024-001"
+    />
+    {validationErrors.receiptNo && (
+      <p className={styles.fieldError}>{validationErrors.receiptNo}</p>
+    )}
+  </div>
+
+  <div className={styles.fieldNoMargin}>
+    <label htmlFor="receipt_date">วันที่ใบเสร็จ</label>
+    <input
+      id="receipt_date"
+      name="receipt_date"
+      type="date"
+      value={receiptDate}
+      onChange={(event) => setReceiptDate(event.target.value)}
+    />
+    {validationErrors.receiptDate && (
+      <p className={styles.fieldError}>{validationErrors.receiptDate}</p>
+    )}
+  </div>
+</div>
+
+
+                  
                   {validationErrors.receiptNo && <p className={styles.fieldError}>{validationErrors.receiptNo}</p>}
                 </div>
               </div>
@@ -534,29 +580,9 @@ export default function GenerateClient() {
                 {validationErrors.vendorAddress && <p className={styles.fieldError}>{validationErrors.vendorAddress}</p>}
               </div>
 
-              <div className={styles.grid2}>
-                <div className={styles.field}>
-                  <label htmlFor="assignee">ผู้ได้รับมอบหมาย</label>
-                  <input
-                    id="assignee"
-                    name="assignee"
-                    type="text"
-                    value={assignee}
-                    onChange={(event) => setAssignee(event.target.value)}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label htmlFor="assignee_position">ตำแหน่งผู้ได้รับมอบหมาย</label>
-                  <input
-                    id="assignee_position"
-                    name="assignee_position"
-                    type="text"
-                    value={assigneePosition}
-                    onChange={(event) => setAssigneePosition(event.target.value)}
-                    placeholder="เช่น ผู้ช่วยช่าง, ช่าง, วิศวกร"
-                  />
-                </div>
-              </div>
+              
+
+
             </section>
 
             <section className={styles.card}>
