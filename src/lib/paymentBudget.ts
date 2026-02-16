@@ -41,8 +41,9 @@ export const buildPaymentBudgetDocText = (paymentBudget: {
 }): string => {
   const accountCode = toTrimmedString(paymentBudget.account_code);
   const accountName = toTrimmedString(paymentBudget.account_name);
+  const accountText = accountName ? ` (${accountName})` : "";
 
-  if (!paymentBudget.type || !accountCode || !accountName) {
+  if (!paymentBudget.type || !accountCode) {
     return "";
   }
 
@@ -54,7 +55,7 @@ export const buildPaymentBudgetDocText = (paymentBudget: {
       return "";
     }
 
-    return `โดยเบิกค่าใช้จ่ายจากงบทำการ ${orgLabel} ศูนย์ต้นทุน ${costCenter} รหัสบัญชี ${accountCode} (${accountName})`;
+    return `โดยเบิกค่าใช้จ่ายจากงบทำการ ${orgLabel} ศูนย์ต้นทุน ${costCenter} รหัสบัญชี ${accountCode}${accountText}`;
   }
 
   if (paymentBudget.type === "po") {
@@ -63,7 +64,7 @@ export const buildPaymentBudgetDocText = (paymentBudget: {
       return "";
     }
 
-    return `โดยเบิกค่าใช้จ่ายจากใบสั่งเลขที่ ${poNo} รหัสบัญชี ${accountCode} (${accountName})`;
+    return `โดยเบิกค่าใช้จ่ายจากใบสั่งเลขที่ ${poNo} รหัสบัญชี ${accountCode}${accountText}`;
   }
 
   const networkNo = toTrimmedString(paymentBudget.network_no);
@@ -71,7 +72,7 @@ export const buildPaymentBudgetDocText = (paymentBudget: {
     return "";
   }
 
-  return `โดยเบิกค่าใช้จ่ายจากงบโครงข่าย ${networkNo} รหัสบัญชี ${accountCode} (${accountName})`;
+  return `โดยเบิกค่าใช้จ่ายจากงบโครงข่าย ${networkNo} รหัสบัญชี ${accountCode}${accountText}`;
 };
 
 export const normalizePaymentBudget = (value: unknown): PaymentBudget | null => {

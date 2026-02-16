@@ -755,17 +755,6 @@ export default function GenerateClient() {
                 </div>
               ) : null}
 
-              <div className={styles.field}>
-                <label htmlFor="payment_budget_doc_preview">Preview ข้อความสำหรับ DOC</label>
-                <textarea
-                  id="payment_budget_doc_preview"
-                  name="payment_budget_doc_preview"
-                  rows={2}
-                  value={paymentBudgetDocText}
-                  readOnly
-                  placeholder="ข้อความจะถูกสร้างอัตโนมัติเมื่อกรอกข้อมูลครบ"
-                />
-              </div>
             </section>
 
             <section className={styles.card}>
