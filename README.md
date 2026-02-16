@@ -98,6 +98,8 @@ Response:
 {{vendor_name}}
 {{vendor_address}}
 {{receipt_no}}
+{{receipt_date}}
+{{receipt_no_date_line}}
 {{assignee}}
 {{assignee_position}}
 {{approved_by}}
@@ -124,6 +126,8 @@ Response:
 บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน: {vendor_name}
 ที่อยู่: {vendor_address}
 เลขที่ใบเสร็จ: {receipt_no}
+วันที่ใบเสร็จ: {receipt_date}
+{receipt_no_date_line}
 ผู้ได้รับมอบหมาย: {assignee}
 ตำแหน่ง: {assignee_position}
 อนุมัติผ่าน: {approved_by}
@@ -163,4 +167,9 @@ alter table public.generated_docs
 
 alter table public.generated_docs
   add column if not exists updated_at timestamptz default now();
+
+alter table public.generated_docs
+  add column if not exists receipt_date date;
 ```
+
+> Placeholder ใหม่สำหรับ Word template: `{receipt_date}`, `{receipt_no_date_line}`

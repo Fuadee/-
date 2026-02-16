@@ -21,6 +21,7 @@ export type GeneratePayload = {
   vendor_name?: string | null;
   vendor_address?: string | null;
   receipt_no?: string | null;
+  receipt_date?: string | null;
   assignee?: string | null;
   assignee_position?: string | null;
   approved_by?: string | null;
@@ -58,7 +59,61 @@ const normalizeItems = (items: ItemPayload[] | null | undefined) => {
 
 const roundForDisplay = (value: number) => Number(value.toFixed(2));
 
+const toValidDate = (value: string | null | undefined): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+export const formatThaiDateBE = (value: string | null | undefined): string => {
+  const date = toValidDate(value);
+  if (!date) {
+    return "";
+  }
+
+  const formatter = new Intl.DateTimeFormat("th-TH-u-ca-gregory-nu-latn", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+
+  const parts = formatter.formatToParts(date);
+  const day = parts.find((part) => part.type === "day")?.value ?? "";
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const christianYear = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+
+  if (!day || !month || !Number.isFinite(christianYear) || christianYear <= 0) {
+    return "";
+  }
+
+  return `${day}/${month}/${christianYear + 543}`;
+};
+
+const buildReceiptNoDateLine = (receiptNo: string, receiptDateThai: string): string => {
+  const hasReceiptNo = Boolean(receiptNo);
+  const hasReceiptDate = Boolean(receiptDateThai);
+
+  if (hasReceiptNo && hasReceiptDate) {
+    return `เลขที่ใบเสร็จ ${receiptNo} ลงวันที่ ${receiptDateThai}`;
+  }
+
+  if (hasReceiptNo) {
+    return `เลขที่ใบเสร็จ ${receiptNo}`;
+  }
+
+  if (hasReceiptDate) {
+    return `ลงวันที่ ${receiptDateThai}`;
+  }
+
+  return "";
+};
+
 export const buildDocxTemplateData = (body: GeneratePayload) => {
+  const receiptNo = body.receipt_no?.trim() ?? "";
+  const receiptDate = formatThaiDateBE(body.receipt_date);
   const normalizedItems = normalizeItems(body.items);
   const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
   const vatEnabled = body.vat_enabled ?? true;
@@ -96,7 +151,9 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     budget_source: body.budget_source ?? "",
     vendor_name: body.vendor_name ?? "",
     vendor_address: body.vendor_address ?? "",
-    receipt_no: body.receipt_no ?? "",
+    receipt_no: receiptNo,
+    receipt_date: receiptDate,
+    receipt_no_date_line: buildReceiptNoDateLine(receiptNo, receiptDate),
     assignee: body.assignee ?? "",
     assignee_position: body.assignee_position ?? "",
     approved_by: body.approved_by ?? "",
