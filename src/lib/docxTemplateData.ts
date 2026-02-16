@@ -137,6 +137,8 @@ const buildReceiptNoDateLine = (receiptNo: string, receiptDateThai: string): str
 export const buildDocxTemplateData = (body: GeneratePayload) => {
   const receiptNo = body.receipt_no?.trim() ?? "";
   const receiptDate = formatThaiDateBE(body.receipt_date);
+  const approvedByRaw = body.approved_by?.trim() ?? "";
+  const approvedByLine = approvedByRaw ? `ผ่าน ${approvedByRaw}` : "";
   const normalizedItems = normalizeItems(body.items);
   const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
   const vatEnabled = body.vat_enabled ?? true;
@@ -179,7 +181,9 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     receipt_no_date_line: buildReceiptNoDateLine(receiptNo, receiptDate),
     assignee: body.assignee ?? "",
     assignee_position: body.assignee_position ?? "",
-    approved_by: body.approved_by ?? "",
+    approved_by: approvedByLine,
+    approved_by_raw: approvedByRaw,
+    approved_by_line: approvedByLine,
     items,
     vat_enabled: vatEnabled,
     vat_rate: vatRate,
