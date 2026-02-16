@@ -26,6 +26,9 @@ export type GeneratePayload = {
   assignee?: string | null;
   assignee_position?: string | null;
   approved_by?: string | null;
+  payment_method?: "credit" | "advance" | "loan" | null;
+  assignee_emp_code?: string | null;
+  loan_doc_no?: string | null;
   payment_budget?: PaymentBudget | null;
   items?: ItemPayload[] | null;
   vat_enabled?: boolean | null;
@@ -152,6 +155,9 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     account_name: body.payment_budget?.account_name
   });
   const normalizedItems = normalizeItems(body.items);
+  const paymentMethod = body.payment_method ?? "credit";
+  const assigneeEmpCode = body.assignee_emp_code?.trim() ?? "";
+  const loanDocNo = body.loan_doc_no?.trim() ?? "";
   const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
   const vatEnabled = body.vat_enabled ?? true;
   const vatRate = toNumber(body.vat_rate ?? 7);
@@ -178,6 +184,22 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const subtotalNetDisplay = roundForDisplay(subtotalNet);
   const vatAmountDisplay = roundForDisplay(vatAmountTotal);
   const grandTotalDisplay = roundForDisplay(grandTotal);
+  const vatNote = vatEnabled ? "รวมภาษีมูลค่าเพิ่ม" : "ไม่รวมภาษีมูลค่าเพิ่ม";
+  const subject = body.subject ?? "";
+  const vendorName = body.vendor_name ?? "";
+  const assignee = body.assignee ?? "";
+  const grandTotalFmt = formatMoneyTH(grandTotalDisplay);
+  const grandTotalText = toThaiBahtText(grandTotalDisplay);
+
+  let paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขออนุมัติเบิกจ่ายค่าซื้อ ${subject} เป็นเงิน ${grandTotalFmt} บาท (${grandTotalText}) (${vatNote}) ให้กับ ร้าน/บริษัท ${vendorName}`;
+
+  if (paymentMethod === "advance") {
+    paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขออนุมัติเบิกจ่ายค่าซื้อ ${subject} เป็นเงิน ${grandTotalFmt} บาท (${grandTotalText}) (${vatNote}) ให้กับ ${assignee} (${assigneeEmpCode}) เนื่องจากได้สำรองจ่ายเงินค่าซื้อฯ ดังกล่าวไปก่อนแล้ว`;
+  }
+
+  if (paymentMethod === "loan") {
+    paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขอให้ ผสน.กฟจ.กระบี่ หักล้างเงินยืมตามใบสำคัญจ่ายเลขที่ ${loanDocNo} ต่อไป`;
+  }
 
   return {
     department: body.department ?? "",
@@ -196,6 +218,10 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     approved_by: approvedByLine,
     approved_by_raw: approvedByRaw,
     approved_by_line: approvedByLine,
+    payment_method: paymentMethod,
+    assignee_emp_code: assigneeEmpCode,
+    loan_doc_no: loanDocNo,
+    payment_detail_text: paymentDetailText,
     payment_budget: paymentBudget,
     pay_text: paymentBudget?.doc_text ?? paymentBudgetDocText,
     items,
@@ -211,7 +237,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     subtotal_incl_vat_fmt: formatMoneyTH(subtotalInclVatDisplay),
     subtotal_net_fmt: formatMoneyTH(subtotalNetDisplay),
     vat_amount_fmt: formatMoneyTH(vatAmountDisplay),
-    grand_total_fmt: formatMoneyTH(grandTotalDisplay),
-    grand_total_text: toThaiBahtText(grandTotalDisplay)
+    grand_total_fmt: grandTotalFmt,
+    grand_total_text: grandTotalText
   };
 };
