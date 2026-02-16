@@ -786,7 +786,19 @@ export default function GenerateClient() {
                 <>
                   <div className={styles.grid2}>
                     <div className={styles.field}>
-                      <label htmlFor="payment_budget_account_code">รหัสบัญชี</label>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <label htmlFor="payment_budget_account_code" className="mb-0">
+                          รหัสบัญชี
+                        </label>
+                        <a
+                          href="https://glsearch.pea.co.th"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-600 transition-colors hover:underline"
+                        >
+                          🔎 ตรวจสอบรหัสบัญชี (GL Search)
+                        </a>
+                      </div>
                       <input
                         id="payment_budget_account_code"
                         name="payment_budget_account_code"
@@ -796,6 +808,7 @@ export default function GenerateClient() {
                           setPaymentBudget((previous) => ({ ...previous, account_code: event.target.value }))
                         }
                       />
+                      <p className={styles.helperText}>หากไม่แน่ใจ กรุณาตรวจสอบรหัสบัญชีก่อนบันทึก</p>
                       {validationErrors.paymentBudgetAccountCode && (
                         <p className={styles.fieldError}>{validationErrors.paymentBudgetAccountCode}</p>
                       )}
