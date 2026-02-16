@@ -74,22 +74,45 @@ export const formatThaiDateBE = (value: string | null | undefined): string => {
     return "";
   }
 
+  const toBuddhistYear = (year: number) => year + 543;
+  const thaiMonths = [
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม"
+  ];
+
   const formatter = new Intl.DateTimeFormat("th-TH-u-ca-gregory-nu-latn", {
-    day: "2-digit",
-    month: "2-digit",
+    day: "numeric",
+    month: "numeric",
     year: "numeric"
   });
 
   const parts = formatter.formatToParts(date);
   const day = parts.find((part) => part.type === "day")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
   const christianYear = Number(parts.find((part) => part.type === "year")?.value ?? "0");
 
-  if (!day || !month || !Number.isFinite(christianYear) || christianYear <= 0) {
+  if (
+    !day ||
+    !Number.isFinite(month) ||
+    month <= 0 ||
+    month > thaiMonths.length ||
+    !Number.isFinite(christianYear) ||
+    christianYear <= 0
+  ) {
     return "";
   }
 
-  return `${day}/${month}/${christianYear + 543}`;
+  return `${day} ${thaiMonths[month - 1]} ${toBuddhistYear(christianYear)}`;
 };
 
 const buildReceiptNoDateLine = (receiptNo: string, receiptDateThai: string): string => {
