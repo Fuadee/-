@@ -12,6 +12,13 @@ import {
   type PaymentBudget,
   type PaymentBudgetType
 } from "@/lib/paymentBudget";
+import {
+  calculateVatBreakdown,
+  getUnitPriceColumnLabel,
+  getVatModeHelperText,
+  getVatModeLabel,
+  type VatMode
+} from "@/lib/vat";
 import styles from "./page.module.css";
 
 type ItemForm = {
@@ -53,6 +60,7 @@ type ValidationErrors = {
   approvedBy?: string;
   paymentMethodAssigneeEmpCode?: string;
   paymentMethodLoanDocNo?: string;
+  vatMode?: string;
   items?: string[];
 };
 
@@ -176,7 +184,7 @@ export default function GenerateClient() {
   const [loadingJob, setLoadingJob] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-  const [vatIncluded] = useState(true);
+  const [vatMode, setVatMode] = useState<VatMode | null>(null);
 
   useEffect(() => {
     if (!editingJobId) {
@@ -265,6 +273,17 @@ export default function GenerateClient() {
           : [];
 
         setItems(parsedItems.length > 0 ? parsedItems : [createEmptyItem()]);
+
+        const payloadVatMode = payload.vat_mode;
+        if (payloadVatMode === "included" || payloadVatMode === "excluded" || payloadVatMode === "none") {
+          setVatMode(payloadVatMode);
+        } else if (payload.vat_enabled === false) {
+          setVatMode("none");
+        } else if (payload.vat_enabled === true) {
+          setVatMode("included");
+        } else {
+          setVatMode(null);
+        }
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "ไม่สามารถโหลดข้อมูลงานสำหรับแก้ไขได้");
       } finally {
@@ -319,14 +338,38 @@ export default function GenerateClient() {
     setLoanDocNo("");
     setPaymentBudget(createEmptyPaymentBudgetForm());
     setItems([createEmptyItem()]);
+    setVatMode(null);
     setError(null);
     setValidationErrors({});
   };
 
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
-  const grandTotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
-  const subtotalNet = vatIncluded ? grandTotal / 1.07 : grandTotal;
-  const vatAmount = vatIncluded ? grandTotal - subtotalNet : grandTotal * 0.07;
+  const vatSummary = useMemo(() => {
+    return items.reduce(
+      (sum, item) => {
+        if (!vatMode) {
+          return sum;
+        }
+
+        const row = calculateVatBreakdown(itemTotal(item), vatMode);
+        return {
+          base: sum.base + row.base,
+          vat: sum.vat + row.vat,
+          total: sum.total + row.total
+        };
+      },
+      { base: 0, vat: 0, total: 0 }
+    );
+  }, [items, vatMode]);
+
+  const subtotalNet = vatSummary.base;
+  const vatAmount = vatSummary.vat;
+  const grandTotal = vatSummary.total;
+  const vatModeLabel = getVatModeLabel(vatMode);
+  const unitPriceColumnLabel = getUnitPriceColumnLabel(vatMode);
+  const vatModeHelperText = getVatModeHelperText(vatMode);
+  const vatModeMissingError = "กรุณาเลือกโหมด VAT ก่อน (รวม VAT / แยก VAT / ไม่มี VAT)";
+  const shouldShowVatModeError = Boolean(validationErrors.vatMode) || !vatMode;
 
   const itemErrors = useMemo(
     () =>
@@ -451,6 +494,10 @@ export default function GenerateClient() {
       errors.paymentMethodLoanDocNo = "กรุณากรอกเลขที่เงินยืม";
     }
 
+    if (!vatMode) {
+      errors.vatMode = vatModeMissingError;
+    }
+
     return errors;
   };
 
@@ -472,6 +519,7 @@ export default function GenerateClient() {
         errors.paymentBudgetAccountName ||
         errors.paymentMethodAssigneeEmpCode ||
         errors.paymentMethodLoanDocNo ||
+        errors.vatMode ||
         errors.items?.some(Boolean)
     );
   };
@@ -507,6 +555,9 @@ export default function GenerateClient() {
         assignee_emp_code: paymentMethod === "advance" ? assigneeEmpCode.trim() || null : null,
         loan_doc_no: paymentMethod === "loan" ? loanDocNo.trim() || null : null,
         payment_budget: paymentBudgetPayload,
+        vat_mode: vatMode,
+        vat_enabled: vatMode === "included" || vatMode === "excluded",
+        vat_rate: 7,
         items: items.map((item, index) => ({
           ...item,
           no: index + 1,
@@ -965,10 +1016,55 @@ export default function GenerateClient() {
 
             <section className={styles.card}>
               <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>รายละเอียดวัสดุ</h2>
+                <div className={styles.materialHeadingWrap}>
+                  <h2 className={styles.sectionTitle}>รายละเอียดวัสดุ</h2>
+                  <span
+                    className={`${styles.vatBadge} ${vatMode ? styles.vatBadgeSelected : styles.vatBadgeWarning}`}
+                  >
+                    VAT: {vatModeLabel}
+                  </span>
+                </div>
                 {/* <button type="button" className={styles.secondaryButton} onClick={addItem}>
                   + เพิ่มรายการ
                 </button> */}
+              </div>
+
+              <div className={`${styles.vatSelectorCard} ${shouldShowVatModeError ? styles.vatSelectorCardError : ""}`}>
+                <p className={styles.vatSelectorLabel}>โหมด VAT</p>
+                <div className={styles.vatRadioGroup}>
+                  <label className={styles.vatRadioItem}>
+                    <input
+                      type="radio"
+                      name="vat_mode"
+                      value="included"
+                      checked={vatMode === "included"}
+                      onChange={() => setVatMode("included")}
+                    />
+                    <span>รวม VAT 7%</span>
+                  </label>
+                  <label className={styles.vatRadioItem}>
+                    <input
+                      type="radio"
+                      name="vat_mode"
+                      value="excluded"
+                      checked={vatMode === "excluded"}
+                      onChange={() => setVatMode("excluded")}
+                    />
+                    <span>แยก VAT 7%</span>
+                  </label>
+                  <label className={styles.vatRadioItem}>
+                    <input
+                      type="radio"
+                      name="vat_mode"
+                      value="none"
+                      checked={vatMode === "none"}
+                      onChange={() => setVatMode("none")}
+                    />
+                    <span>ไม่มี VAT</span>
+                  </label>
+                </div>
+                {vatModeHelperText ? <p className={styles.helperText}>{vatModeHelperText}</p> : null}
+                {shouldShowVatModeError ? <p className={styles.fieldError}>{vatModeMissingError}</p> : null}
               </div>
 
               <div className={styles.tableWrap}>
@@ -979,7 +1075,7 @@ export default function GenerateClient() {
                       <th>ชื่อวัสดุ</th>
                       <th>จำนวน</th>
                       <th>หน่วย</th>
-                      <th>ราคาต่อหน่วย (รวม VAT)</th>
+                      <th>{unitPriceColumnLabel}</th>
                       <th>ราคารวม</th>
                       <th>คุณลักษณะ (spec)</th>
                       <th>Actions</th>
@@ -1080,12 +1176,7 @@ export default function GenerateClient() {
                 </div>
 
                 <div className={styles.summaryActions}>
-                  <label className={styles.toggleRow}>
-                    <span>VAT included mode</span>
-                    <input type="checkbox" checked={vatIncluded} readOnly aria-label="VAT included mode" />
-                  </label>
-
-                  <button type="submit" className={styles.primaryButton} disabled={loading}>
+                  <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
                     {loading ? (
                       <span className={styles.spinnerWrap}>
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
