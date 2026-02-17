@@ -1,6 +1,7 @@
 import { formatMoneyTH, toNumber } from "@/lib/money";
 import { buildPaymentBudgetDocText, normalizePaymentBudget, type PaymentBudget } from "@/lib/paymentBudget";
 import { toThaiBahtText } from "@/lib/thaiBahtText";
+import { calculateVatBreakdown, VAT_RATE_DECIMAL, type VatMode } from "@/lib/vat";
 
 export type ItemPayload = {
   no?: number;
@@ -31,6 +32,7 @@ export type GeneratePayload = {
   loan_doc_no?: string | null;
   payment_budget?: PaymentBudget | null;
   items?: ItemPayload[] | null;
+  vat_mode?: VatMode | null;
   vat_enabled?: boolean | null;
   vat_rate?: number | string | null;
 };
@@ -158,27 +160,35 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const paymentMethod = body.payment_method ?? "credit";
   const assigneeEmpCode = body.assignee_emp_code?.trim() ?? "";
   const loanDocNo = body.loan_doc_no?.trim() ?? "";
-  const subtotalInclVat = normalizedItems.reduce((sum, item) => sum + item.total_num, 0);
-  const vatEnabled = body.vat_enabled ?? true;
+  const vatMode: VatMode =
+    body.vat_mode === "included" || body.vat_mode === "excluded" || body.vat_mode === "none"
+      ? body.vat_mode
+      : body.vat_enabled === false
+        ? "none"
+        : "included";
+  const vatEnabled = vatMode !== "none";
   const vatRate = toNumber(body.vat_rate ?? 7);
-  const vatMultiplier = 1 + vatRate / 100;
+  const vatRateDecimal = vatRate > 1 ? vatRate / 100 : vatRate || VAT_RATE_DECIMAL;
 
   const items = normalizedItems.map((item) => {
-    const totalNet = vatEnabled ? item.total_num / vatMultiplier : item.total_num;
-    const vatAmountItem = vatEnabled ? item.total_num - totalNet : 0;
+    const computed = calculateVatBreakdown(item.total_num, vatMode, vatRateDecimal);
 
     return {
       ...item,
-      total_net_num: totalNet,
-      vat_amount_num: vatAmountItem,
-      total_net_fmt: formatMoneyTH(roundForDisplay(totalNet)),
-      vat_amount_fmt: formatMoneyTH(roundForDisplay(vatAmountItem))
+      total_net_num: computed.base,
+      vat_amount_num: computed.vat,
+      total_num: computed.total,
+      total: formatMoneyTH(roundForDisplay(computed.total)),
+      total_fmt: formatMoneyTH(roundForDisplay(computed.total)),
+      total_net_fmt: formatMoneyTH(roundForDisplay(computed.base)),
+      vat_amount_fmt: formatMoneyTH(roundForDisplay(computed.vat))
     };
   });
 
   const subtotalNet = items.reduce((sum, item) => sum + item.total_net_num, 0);
-  const vatAmountTotal = vatEnabled ? subtotalInclVat - subtotalNet : 0;
-  const grandTotal = subtotalInclVat;
+  const vatAmountTotal = items.reduce((sum, item) => sum + item.vat_amount_num, 0);
+  const grandTotal = items.reduce((sum, item) => sum + item.total_num, 0);
+  const subtotalInclVat = grandTotal;
 
   const subtotalInclVatDisplay = roundForDisplay(subtotalInclVat);
   const subtotalNetDisplay = roundForDisplay(subtotalNet);
@@ -225,6 +235,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     payment_budget: paymentBudget,
     pay_text: paymentBudget?.doc_text ?? paymentBudgetDocText,
     items,
+    vat_mode: vatMode,
     vat_enabled: vatEnabled,
     vat_rate: vatRate,
     vat_rate_percent: `${vatRate}%`,

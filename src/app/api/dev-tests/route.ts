@@ -25,7 +25,8 @@ export async function GET() {
     }
   ];
 
-  const calc = buildDocxTemplateData({
+  const calcIncluded = buildDocxTemplateData({
+    vat_mode: "included",
     vat_enabled: true,
     vat_rate: 7,
     items: [
@@ -36,14 +37,38 @@ export async function GET() {
 
   checks.push({
     name: "VAT 7% amount from VAT-included prices",
-    actual: String(Number(calc.vat_amount.toFixed(2))),
+    actual: String(Number(calcIncluded.vat_amount.toFixed(2))),
     expected: String(52.34)
   });
 
   checks.push({
     name: "Grand total equals VAT-included subtotal",
-    actual: String(calc.grand_total),
+    actual: String(calcIncluded.grand_total),
     expected: String(800)
+  });
+
+  const calcExcluded = buildDocxTemplateData({
+    vat_mode: "excluded",
+    vat_rate: 7,
+    items: [{ name: "A", qty: "1", price: "100" }]
+  });
+
+  checks.push({
+    name: "Excluded VAT mode adds VAT to grand total",
+    actual: String(Number(calcExcluded.grand_total.toFixed(2))),
+    expected: String(107)
+  });
+
+  const calcNone = buildDocxTemplateData({
+    vat_mode: "none",
+    vat_rate: 7,
+    items: [{ name: "A", qty: "1", price: "100" }]
+  });
+
+  checks.push({
+    name: "No VAT mode keeps VAT amount as zero",
+    actual: String(calcNone.vat_amount),
+    expected: String(0)
   });
 
   const failures = checks.filter((check) => check.actual !== check.expected);
