@@ -171,17 +171,39 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const vatRateDecimal = vatRate > 1 ? vatRate / 100 : vatRate || VAT_RATE_DECIMAL;
 
   const items = normalizedItems.map((item) => {
-    const computed = calculateVatBreakdown(item.total_num, vatMode, vatRateDecimal);
+    const breakdown = calculateVatBreakdown(item.total_num, vatMode, vatRateDecimal);
+    const itemLineTotalBase = breakdown.base;
+    const itemLineTotalIncluded = breakdown.total;
+    const itemVatAmount = breakdown.vat;
+    const itemUnitPriceBase = item.qty_num > 0 ? itemLineTotalBase / item.qty_num : 0;
+    const itemUnitPriceIncluded = item.qty_num > 0 ? itemLineTotalIncluded / item.qty_num : 0;
+    const shouldDisplayIncludedLine = vatMode === "included";
+
+    const lineTotalNum = shouldDisplayIncludedLine ? itemLineTotalIncluded : itemLineTotalBase;
+    const unitPriceNum = shouldDisplayIncludedLine ? itemUnitPriceIncluded : itemUnitPriceBase;
 
     return {
       ...item,
-      total_net_num: computed.base,
-      vat_amount_num: computed.vat,
-      total_num: computed.total,
-      total: formatMoneyTH(roundForDisplay(computed.total)),
-      total_fmt: formatMoneyTH(roundForDisplay(computed.total)),
-      total_net_fmt: formatMoneyTH(roundForDisplay(computed.base)),
-      vat_amount_fmt: formatMoneyTH(roundForDisplay(computed.vat))
+      item_unit_price_base: itemUnitPriceBase,
+      item_line_total_base: itemLineTotalBase,
+      item_unit_price_included: itemUnitPriceIncluded,
+      item_line_total_included: itemLineTotalIncluded,
+      unit_price_num: unitPriceNum,
+      line_total_num: lineTotalNum,
+      total_net_num: itemLineTotalBase,
+      vat_amount_num: itemVatAmount,
+      total_num: itemLineTotalIncluded,
+      price: formatMoneyTH(roundForDisplay(unitPriceNum)),
+      price_fmt: formatMoneyTH(roundForDisplay(unitPriceNum)),
+      total: formatMoneyTH(roundForDisplay(lineTotalNum)),
+      total_fmt: formatMoneyTH(roundForDisplay(lineTotalNum)),
+      line_total_fmt: formatMoneyTH(roundForDisplay(lineTotalNum)),
+      total_net_fmt: formatMoneyTH(roundForDisplay(itemLineTotalBase)),
+      vat_amount_fmt: formatMoneyTH(roundForDisplay(itemVatAmount)),
+      item_unit_price_base_fmt: formatMoneyTH(roundForDisplay(itemUnitPriceBase)),
+      item_line_total_base_fmt: formatMoneyTH(roundForDisplay(itemLineTotalBase)),
+      item_unit_price_included_fmt: formatMoneyTH(roundForDisplay(itemUnitPriceIncluded)),
+      item_line_total_included_fmt: formatMoneyTH(roundForDisplay(itemLineTotalIncluded))
     };
   });
 
@@ -246,6 +268,8 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     grand_total: grandTotal,
     subtotal_fmt: formatMoneyTH(subtotalInclVatDisplay),
     subtotal_incl_vat_fmt: formatMoneyTH(subtotalInclVatDisplay),
+    subtotal_before_vat: subtotalNet,
+    subtotal_before_vat_fmt: formatMoneyTH(subtotalNetDisplay),
     subtotal_net_fmt: formatMoneyTH(subtotalNetDisplay),
     vat_amount_fmt: formatMoneyTH(vatAmountDisplay),
     grand_total_fmt: grandTotalFmt,
