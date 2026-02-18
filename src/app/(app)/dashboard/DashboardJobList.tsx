@@ -24,7 +24,18 @@ type DialogState = {
   id: string;
   title: string;
   status: EffectiveStatus;
+  detailsText: string;
+  vendorName: string;
+  taxId: string;
+  grandTotal: number | null;
 } | null;
+
+type JobPayload = {
+  subject_detail?: unknown;
+  vendor_name?: unknown;
+  tax_id?: unknown;
+  items?: unknown;
+};
 
 const formatDate = (value: unknown) => {
   if (typeof value !== "string" || !value) {
@@ -57,6 +68,53 @@ const normalizeStatus = (value: unknown): EffectiveStatus => {
   }
 
   return "pending_approval";
+};
+
+const asTrimmedString = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+};
+
+const parseJobPayload = (value: unknown): JobPayload => {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return typeof parsed === "object" && parsed !== null ? (parsed as JobPayload) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return value as JobPayload;
+  }
+
+  return {};
+};
+
+const getGrandTotal = (itemsValue: unknown): number | null => {
+  if (!Array.isArray(itemsValue)) {
+    return null;
+  }
+
+  const total = itemsValue.reduce((sum, item) => {
+    if (typeof item !== "object" || item === null) {
+      return sum;
+    }
+
+    const current = item as Record<string, unknown>;
+    const value = typeof current.total === "number" ? current.total : Number(current.total);
+    if (!Number.isFinite(value)) {
+      return sum;
+    }
+
+    return sum + value;
+  }, 0);
+
+  return Number.isFinite(total) ? total : null;
 };
 
 const getStatusLabel = (status: EffectiveStatus): string =>
@@ -102,8 +160,20 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
     return "border-purple-200 bg-purple-50 text-purple-700 hover:border-purple-300 hover:bg-purple-100 focus-visible:ring-purple-300";
   };
 
-  const handleStatusClick = (id: string, title: string, status: EffectiveStatus) => {
-    setDialog({ id, title, status });
+  const handleStatusClick = (job: DashboardJobItem, status: EffectiveStatus) => {
+    const id = String(job.id ?? "");
+    const title = getJobTitle(job);
+    const payload = parseJobPayload(job.payload);
+
+    setDialog({
+      id,
+      title,
+      status,
+      detailsText: asTrimmedString(payload.subject_detail),
+      vendorName: asTrimmedString(payload.vendor_name),
+      taxId: asTrimmedString(payload.tax_id) || asTrimmedString(job.tax_id),
+      grandTotal: getGrandTotal(payload.items)
+    });
     setErrorMessage(null);
   };
 
@@ -223,7 +293,7 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สถานะ</p>
                   <button
                     type="button"
-                    onClick={() => handleStatusClick(id, getJobTitle(job), status)}
+                    onClick={() => handleStatusClick(job, status)}
                     className={`rounded-full border px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2 ${getStatusClassName(status)}`}
                   >
                     {getStatusLabel(status)}
@@ -260,6 +330,10 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
         open={Boolean(dialog)}
         jobTitle={dialog?.title ?? ""}
         status={dialog?.status ?? "pending_approval"}
+        detailsText={dialog?.detailsText ?? ""}
+        vendorName={dialog?.vendorName ?? ""}
+        taxId={dialog?.taxId ?? ""}
+        grandTotal={dialog?.grandTotal ?? null}
         isSaving={isSaving}
         errorMessage={errorMessage}
         onClose={() => setDialog(null)}
