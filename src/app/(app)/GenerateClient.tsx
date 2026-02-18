@@ -979,7 +979,6 @@ export default function GenerateClient() {
 
 
                   
-                  {validationErrors.receiptNo && <p className={styles.fieldError}>{validationErrors.receiptNo}</p>}
                 </div>
               </div>
 

@@ -12,9 +12,15 @@ export type PaymentBudget = {
 };
 
 export const OPERATING_ORG_OPTIONS = [
-  { label: "กฟจ.กระบี่", costCenter: "K3014101000" },
-  { label: "แผนกปฏิบัติการ", costCenter: "K3014101001" },
-  { label: "แผนกสนับสนุน", costCenter: "K3014101002" }
+  { label: "กลุ่มบริหาร กฟจ.กระบี่", costCenter: "K3014101000" },
+  { label: "แผนกบริการและลูกค้าสัมพันธ์", costCenter: "K304101010" },
+  { label: "แผนกมิเตอร์และหม้อแปลง", costCenter: "k3041010202" },
+  { label: "แผนกปฏิบัติการและบำรุงรักษาระบบไฟฟ้า", costCenter: "k304101030" },
+  { label: "แผนกก่อสร้างระบบไฟฟ้า", costCenter: "K304101040" },
+  { label: "แผนกบริหารรายได้ค่าไฟฟ้า", costCenter: "K304101050" },
+  { label: "แผนกคลังพัสดุ", costCenter: "K304101060" },
+  { label: "กฟส.บ้านเกาะพีพี", costCenter: "K304107000" },
+  { label: "กฟส.อ่าวนาง", costCenter: "K304108000" }
 ] as const;
 
 const PAYMENT_BUDGET_TYPES: PaymentBudgetType[] = ["operating", "po", "network"];
