@@ -102,24 +102,21 @@ function UpdateStatusCopySection({ detailsText, vendorName, taxId, grandTotal }:
   };
 
   return (
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 shadow-sm">
+    <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-900">ข้อมูลสำหรับ e-Procurement</h3>
+        <h3 className="text-sm font-semibold text-slate-900">คัดลอกไปกรอกใน e-Procurement</h3>
         <button
           type="button"
           onClick={handleCopyAll}
-          className="rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-400 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-fuchsia-400/25 transition duration-200 hover:brightness-110"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
         >
           {copiedKey === "all" ? "คัดลอกแล้ว" : "คัดลอกทั้งหมด"}
         </button>
       </div>
 
-      <div className="grid gap-3">
+      <div className="space-y-2">
         {rows.map((row) => (
-          <div
-            key={row.key}
-            className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2.5 transition duration-200 hover:border-fuchsia-200 hover:bg-fuchsia-50/40"
-          >
+          <div key={row.key} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-slate-500">{row.label}</p>
               <p className="break-words text-sm text-slate-900">{getDisplayValue(row.value)}</p>
@@ -127,7 +124,7 @@ function UpdateStatusCopySection({ detailsText, vendorName, taxId, grandTotal }:
             <button
               type="button"
               onClick={() => handleCopy(row.key, row.value)}
-              className="shrink-0 rounded-lg bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-400 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition duration-200 hover:brightness-110"
+              className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
             >
               {copiedKey === row.key ? "คัดลอกแล้ว" : "Copy"}
             </button>
@@ -153,66 +150,24 @@ export default function StatusActionDialog({
   onClose,
   onUpdateStatus
 }: StatusActionDialogProps) {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      const id = window.requestAnimationFrame(() => setIsVisible(true));
-      return () => window.cancelAnimationFrame(id);
-    }
-
-    setIsVisible(false);
-    return undefined;
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
   if (!open) {
     return null;
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm transition-opacity duration-200 ${isVisible ? "opacity-100" : "opacity-0"}`}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div className={`w-[92vw] max-w-lg rounded-3xl border border-white/70 bg-gradient-to-b from-white via-white to-slate-50/80 p-5 shadow-2xl ring-1 ring-slate-200/70 transition duration-200 ease-out sm:p-6 ${isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         {status === "pending_approval" ? (
           <>
-            <div className="rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-orange-400 p-[1px] shadow-lg">
-              <div className="rounded-2xl bg-gradient-to-r from-purple-500/95 via-fuchsia-500/90 to-orange-400/95 px-4 py-4 text-white">
-                <span className="inline-flex rounded-full border border-white/45 bg-white/20 px-3 py-1 text-xs font-semibold tracking-wide text-white backdrop-blur">
-                  คัดลอกไปกรอกใน e-Procurement
-                </span>
-                <h2 className="mt-3 text-xl font-semibold">อัปเดตสถานะงาน</h2>
-                <p className="mt-1 text-sm text-white/90">{jobTitle}</p>
-              </div>
-            </div>
-
+            <h2 className="text-lg font-semibold text-slate-900">อัปเดตสถานะงาน</h2>
+            <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
             <p className="mt-4 text-sm text-slate-700">
               เข้าไปที่{" "}
               <a
                 href="https://eprocurement.pea.co.th/"
                 target="_blank"
                 rel="noreferrer"
-                className="font-semibold text-fuchsia-700 underline decoration-fuchsia-300 underline-offset-2"
+                className="font-medium text-blue-600 underline underline-offset-2"
               >
                 https://eprocurement.pea.co.th/
               </a>{" "}
@@ -225,12 +180,12 @@ export default function StatusActionDialog({
               <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยังไม่ลง
               </button>
@@ -238,7 +193,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={() => onUpdateStatus("pending_review")}
                 disabled={isSaving}
-                className="rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/25 transition duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? "กำลังบันทึก..." : "ลงแล้ว"}
               </button>
@@ -255,12 +210,12 @@ export default function StatusActionDialog({
               <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยกเลิก
               </button>
@@ -268,7 +223,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={() => onUpdateStatus("needs_fix")}
                 disabled={isSaving}
-                className="rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 กลับไปแก้ไข
               </button>
@@ -276,7 +231,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={() => onUpdateStatus("awaiting_payment")}
                 disabled={isSaving}
-                className="rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/25 transition duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ตรวจผ่าน
               </button>
@@ -293,12 +248,12 @@ export default function StatusActionDialog({
               <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
             ) : null}
 
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยกเลิก
               </button>
@@ -306,7 +261,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยัง
               </button>
@@ -314,7 +269,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={() => onUpdateStatus("pending_review")}
                 disabled={isSaving}
-                className="rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-400 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/25 transition duration-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ใช่
               </button>
@@ -327,11 +282,11 @@ export default function StatusActionDialog({
             <h2 className="text-lg font-semibold text-slate-900">สถานะรอเบิกจ่าย</h2>
             <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
 
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
               >
                 ปิด
               </button>
