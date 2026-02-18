@@ -19,6 +19,7 @@ import {
   getVatModeLabel,
   type VatMode
 } from "@/lib/vat";
+import IncompleteFormModal from "@/components/IncompleteFormModal";
 import styles from "./page.module.css";
 
 type ItemForm = {
@@ -63,6 +64,28 @@ type ValidationErrors = {
   paymentMethodLoanDocNo?: string;
   vatMode?: string;
   items?: string[];
+};
+
+const fieldLabelMap: Record<Exclude<keyof ValidationErrors, "items">, string> = {
+  department: "แผนก",
+  subject: "เรื่อง",
+  purpose: "วัตถุประสงค์",
+  budgetAmount: "งบประมาณ",
+  vendorName: "ชื่อผู้ขาย",
+  taxId: "เลขผู้เสียภาษี/บัตรประชาชน",
+  vendorAddress: "ที่อยู่ผู้ขาย",
+  receiptNo: "เลขที่ใบเสร็จ",
+  receiptDate: "วันที่ใบเสร็จ",
+  paymentBudgetType: "ประเภทการเบิกจ่าย",
+  paymentBudgetOrg: "สังกัด",
+  paymentBudgetPoNo: "เลขที่ใบสั่ง",
+  paymentBudgetNetworkNo: "เลขที่โครงข่าย",
+  paymentBudgetAccountCode: "รหัสบัญชี",
+  paymentBudgetAccountName: "ชื่อบัญชี",
+  approvedBy: "ผู้อนุมัติ",
+  paymentMethodAssigneeEmpCode: "รหัสพนักงานผู้สำรองจ่าย",
+  paymentMethodLoanDocNo: "เลขที่เงินยืม",
+  vatMode: "โหมด VAT"
 };
 
 type PaymentBudgetForm = {
@@ -186,6 +209,8 @@ export default function GenerateClient() {
   const [loadingJob, setLoadingJob] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [vatMode, setVatMode] = useState<VatMode | null>(null);
 
   useEffect(() => {
@@ -549,14 +574,39 @@ export default function GenerateClient() {
     );
   };
 
+
+  const collectMissingFields = (errors: ValidationErrors): string[] => {
+    const basicFields = (Object.keys(fieldLabelMap) as Array<Exclude<keyof ValidationErrors, "items">>)
+      .filter((key) => Boolean(errors[key]))
+      .map((key) => fieldLabelMap[key]);
+
+    const missingItemFields =
+      errors.items
+        ?.map((itemError, index) => {
+          if (!itemError) {
+            return null;
+          }
+
+          return `รายการวัสดุลำดับที่ ${index + 1}`;
+        })
+        .filter((value): value is string => Boolean(value)) ?? [];
+
+    return Array.from(new Set([...basicFields, ...missingItemFields]));
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const errors = validateForm();
     setValidationErrors(errors);
 
     if (hasValidationError(errors)) {
+      setMissingFields(collectMissingFields(errors));
+      setShowIncompleteModal(true);
       return;
     }
+
+    setShowIncompleteModal(false);
+    setMissingFields([]);
 
     setLoading(true);
     setError(null);
@@ -647,7 +697,13 @@ export default function GenerateClient() {
   };
 
   return (
-    <main className={styles.page}>
+    <>
+      <IncompleteFormModal
+        open={showIncompleteModal}
+        missingFields={missingFields}
+        onClose={() => setShowIncompleteModal(false)}
+      />
+      <main className={styles.page}>
       <div className={styles.container}>
         <div className={styles.header}>
           <h1>Generate DOCX</h1>
@@ -1238,5 +1294,6 @@ export default function GenerateClient() {
         </form>
       </div>
     </main>
+    </>
   );
 }
