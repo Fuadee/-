@@ -11,6 +11,7 @@ const COLUMN_PROBE_CANDIDATES = [
   "department",
   "subject",
   "receipt_date",
+  "tax_id",
   "created_at",
   "status",
   "doc_url",
