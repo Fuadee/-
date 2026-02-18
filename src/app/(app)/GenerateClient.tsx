@@ -41,7 +41,7 @@ type JobResponse = {
   message?: string;
 };
 
-type PaymentMethod = "credit" | "advance" | "loan";
+type PaymentMethod = "" | "credit" | "advance" | "loan";
 
 type ValidationErrors = {
   department?: string;
@@ -60,6 +60,7 @@ type ValidationErrors = {
   paymentBudgetAccountCode?: string;
   paymentBudgetAccountName?: string;
   approvedBy?: string;
+  paymentMethod?: string;
   paymentMethodAssigneeEmpCode?: string;
   paymentMethodLoanDocNo?: string;
   vatMode?: string;
@@ -83,6 +84,7 @@ const fieldLabelMap: Record<Exclude<keyof ValidationErrors, "items">, string> = 
   paymentBudgetAccountCode: "รหัสบัญชี",
   paymentBudgetAccountName: "ชื่อบัญชี",
   approvedBy: "ผู้อนุมัติ",
+  paymentMethod: "แบบการเบิกจ่าย",
   paymentMethodAssigneeEmpCode: "รหัสพนักงานผู้สำรองจ่าย",
   paymentMethodLoanDocNo: "เลขที่เงินยืม",
   vatMode: "โหมด VAT"
@@ -200,7 +202,7 @@ export default function GenerateClient() {
   const [assignee, setAssignee] = useState("");
   const [assigneePosition, setAssigneePosition] = useState("");
   const [approvedBy, setApprovedBy] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("");
   const [assigneeEmpCode, setAssigneeEmpCode] = useState("");
   const [loanDocNo, setLoanDocNo] = useState("");
   const [paymentBudget, setPaymentBudget] = useState<PaymentBudgetForm>(createEmptyPaymentBudgetForm());
@@ -258,7 +260,7 @@ export default function GenerateClient() {
         const normalizedPaymentMethod: PaymentMethod =
           methodValue === "advance" || methodValue === "loan" || methodValue === "credit"
             ? methodValue
-            : "credit";
+            : "";
         setPaymentMethod(normalizedPaymentMethod);
 
         const assigneeEmpCodeValue =
@@ -368,7 +370,7 @@ export default function GenerateClient() {
     setAssignee("");
     setAssigneePosition("");
     setApprovedBy("");
-    setPaymentMethod("credit");
+    setPaymentMethod("");
     setAssigneeEmpCode("");
     setLoanDocNo("");
     setPaymentBudget(createEmptyPaymentBudgetForm());
@@ -476,7 +478,7 @@ export default function GenerateClient() {
 
   const handlePaymentMethodChange = (value: string) => {
     const normalizedValue: PaymentMethod =
-      value === "advance" || value === "loan" || value === "credit" ? value : "credit";
+      value === "advance" || value === "loan" || value === "credit" ? value : "";
 
     setPaymentMethod(normalizedValue);
 
@@ -535,6 +537,10 @@ export default function GenerateClient() {
       if (!paymentBudget.account_name.trim()) errors.paymentBudgetAccountName = "กรุณากรอกชื่อบัญชี";
     }
 
+    if (!paymentMethod) {
+      errors.paymentMethod = "กรุณาเลือกแบบการเบิกจ่าย";
+    }
+
     if (paymentMethod === "advance" && !assigneeEmpCode.trim()) {
       errors.paymentMethodAssigneeEmpCode = "กรุณากรอกรหัสพนักงานผู้สำรองจ่าย";
     }
@@ -567,6 +573,7 @@ export default function GenerateClient() {
         errors.paymentBudgetNetworkNo ||
         errors.paymentBudgetAccountCode ||
         errors.paymentBudgetAccountName ||
+        errors.paymentMethod ||
         errors.paymentMethodAssigneeEmpCode ||
         errors.paymentMethodLoanDocNo ||
         errors.vatMode ||
@@ -968,13 +975,20 @@ export default function GenerateClient() {
                     <select
                       id="payment_method"
                       name="payment_method"
+                      required
                       value={paymentMethod}
                       onChange={(event) => handlePaymentMethodChange(event.target.value)}
                     >
+                      <option value="" disabled>
+                        -- เลือกแบบการเบิกจ่าย --
+                      </option>
                       <option value="credit">เครดิต</option>
                       <option value="advance">สำรองจ่าย</option>
                       <option value="loan">เงินยืม</option>
                     </select>
+                    {validationErrors.paymentMethod && (
+                      <p className={styles.fieldError}>{validationErrors.paymentMethod}</p>
+                    )}
                   </div>
 
                   {paymentMethod === "advance" ? (
