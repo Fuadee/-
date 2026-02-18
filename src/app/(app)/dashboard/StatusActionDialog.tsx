@@ -102,39 +102,29 @@ function UpdateStatusCopySection({ detailsText, vendorName, taxId, grandTotal }:
   };
 
   return (
-    <section className="mt-4 rounded-2xl border border-violet-100/70 bg-gradient-to-b from-white/80 to-violet-50/30 p-4">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900">คัดลอกไปกรอกใน e-Procurement</h3>
-          <p className="text-[11px] text-slate-500">กด Copy เพื่อคัดลอกค่าไปวางได้ทันที</p>
-        </div>
+    <section className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-slate-900">คัดลอกไปกรอกใน e-Procurement</h3>
         <button
           type="button"
           onClick={handleCopyAll}
-          className="rounded-full border border-violet-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-50"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
         >
           {copiedKey === "all" ? "คัดลอกแล้ว" : "คัดลอกทั้งหมด"}
         </button>
       </div>
 
-      <div className="mt-3 max-h-[44vh] space-y-2 overflow-auto pr-1">
+      <div className="space-y-2">
         {rows.map((row) => (
-          <div
-            key={row.key}
-            className="flex items-start justify-between gap-3 rounded-xl border border-slate-200/70 bg-white/80 px-4 py-3 backdrop-blur transition hover:border-violet-200/70 hover:shadow-sm"
-          >
+          <div key={row.key} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] text-slate-500">{row.label}</p>
-              <p className="mt-1 break-words text-sm font-semibold text-slate-900">{getDisplayValue(row.value)}</p>
+              <p className="text-xs font-medium text-slate-500">{row.label}</p>
+              <p className="break-words text-sm text-slate-900">{getDisplayValue(row.value)}</p>
             </div>
             <button
               type="button"
               onClick={() => handleCopy(row.key, row.value)}
-              className={`shrink-0 px-3 py-1.5 text-xs font-medium transition ${
-                copiedKey === row.key
-                  ? "rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "rounded-full border border-slate-200 bg-white/70 text-slate-700 hover:border-violet-200 hover:bg-violet-50"
-              }`}
+              className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
             >
               {copiedKey === row.key ? "คัดลอกแล้ว" : "Copy"}
             </button>
@@ -165,34 +155,24 @@ export default function StatusActionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-[2px]">
-      <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-2xl border border-violet-100/70 bg-gradient-to-b from-white to-violet-50/40 p-5 shadow-[0_18px_60px_-18px_rgba(0,0,0,0.25)] sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         {status === "pending_approval" ? (
           <>
-            <h2 className="text-xl font-semibold tracking-tight text-slate-900">อัปเดตสถานะงาน</h2>
-            <p className="mt-2 inline-flex items-center rounded-full bg-violet-100/60 px-3 py-1 text-xs font-medium text-violet-700">{jobTitle}</p>
-            <div className="my-4 h-px bg-slate-200/70" />
-            <div className="rounded-xl border border-violet-100/70 bg-white/70 px-4 py-3 backdrop-blur">
-              <p className="text-xs font-medium text-slate-600">ลิงก์ e-Procurement</p>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <a
-                  href="https://eprocurement.pea.co.th/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-violet-700 underline underline-offset-2 hover:text-violet-800"
-                >
-                  https://eprocurement.pea.co.th/
-                </a>
-                <a
-                  href="https://eprocurement.pea.co.th/"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 rounded-full border border-violet-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-50"
-                >
-                  เปิดลิงก์
-                </a>
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold text-slate-900">อัปเดตสถานะงาน</h2>
+            <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
+            <p className="mt-4 text-sm text-slate-700">
+              เข้าไปที่{" "}
+              <a
+                href="https://eprocurement.pea.co.th/"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-blue-600 underline underline-offset-2"
+              >
+                https://eprocurement.pea.co.th/
+              </a>{" "}
+              เพื่อลงข้อมูล
+            </p>
 
             <UpdateStatusCopySection detailsText={detailsText} vendorName={vendorName} taxId={taxId} grandTotal={grandTotal} />
 
@@ -200,12 +180,12 @@ export default function StatusActionDialog({
               <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
             ) : null}
 
-            <div className="mt-5 flex justify-end gap-2 border-t border-slate-200/70 pt-4">
+            <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSaving}
-                className="rounded-full border border-slate-200 bg-white/60 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยังไม่ลง
               </button>
@@ -213,7 +193,7 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={() => onUpdateStatus("pending_review")}
                 disabled={isSaving}
-                className="rounded-full bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-2 text-sm font-medium text-white transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-violet-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? "กำลังบันทึก..." : "ลงแล้ว"}
               </button>
