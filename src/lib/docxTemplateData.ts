@@ -21,6 +21,7 @@ export type GeneratePayload = {
   budget_amount?: string | null;
   budget_source?: string | null;
   vendor_name?: string | null;
+  tax_id?: string | null;
   vendor_address?: string | null;
   receipt_no?: string | null;
   receipt_date?: string | null;
@@ -241,6 +242,8 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
     budget_amount: body.budget_amount ?? "",
     budget_source: body.budget_source ?? "",
     vendor_name: body.vendor_name ?? "",
+    tax_id: body.tax_id ?? "",
+    vendor_tax_id: body.tax_id ?? "",
     vendor_address: body.vendor_address ?? "",
     receipt_no: receiptNo,
     receipt_date: receiptDate,

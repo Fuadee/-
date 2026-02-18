@@ -48,6 +48,7 @@ type ValidationErrors = {
   purpose?: string;
   budgetAmount?: string;
   vendorName?: string;
+  taxId?: string;
   vendorAddress?: string;
   receiptNo?: string;
   receiptDate?: string;
@@ -169,6 +170,7 @@ export default function GenerateClient() {
   const [purpose, setPurpose] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [vendorName, setVendorName] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [vendorAddress, setVendorAddress] = useState("");
   const [receiptNo, setReceiptNo] = useState("");
   const [receiptDate, setReceiptDate] = useState("");
@@ -212,6 +214,13 @@ export default function GenerateClient() {
         setPurpose(typeof payload.purpose === "string" ? payload.purpose : "");
         setBudgetAmount(typeof payload.budget_amount === "string" ? payload.budget_amount : "");
         setVendorName(typeof payload.vendor_name === "string" ? payload.vendor_name : "");
+        const payloadTaxId =
+          typeof payload.tax_id === "string"
+            ? payload.tax_id
+            : typeof job.tax_id === "string"
+              ? job.tax_id
+              : "";
+        setTaxId(payloadTaxId);
         setVendorAddress(typeof payload.vendor_address === "string" ? payload.vendor_address : "");
         setReceiptNo(typeof payload.receipt_no === "string" ? payload.receipt_no : "");
         setReceiptDate(typeof payload.receipt_date === "string" ? payload.receipt_date : "");
@@ -327,6 +336,7 @@ export default function GenerateClient() {
     setPurpose("");
     setBudgetAmount("");
     setVendorName("");
+    setTaxId("");
     setVendorAddress("");
     setReceiptNo("");
     setReceiptDate("");
@@ -454,6 +464,12 @@ export default function GenerateClient() {
     }
   };
 
+  const normalizeTaxId = (value: string) => value.replace(/\D/g, "");
+
+  const handleTaxIdChange = (value: string) => {
+    setTaxId(value.replace(/[^\d-]/g, ""));
+  };
+
   const validateForm = (): ValidationErrors => {
     const errors: ValidationErrors = {
       items: itemErrors
@@ -463,6 +479,14 @@ export default function GenerateClient() {
     if (!subject.trim()) errors.subject = "กรุณากรอกเรื่อง";
     if (!purpose.trim()) errors.purpose = "กรุณากรอกวัตถุประสงค์";
     if (!vendorName.trim()) errors.vendorName = "กรุณากรอกชื่อผู้ขาย";
+    if (!taxId.trim()) {
+      errors.taxId = "กรุณากรอกเลขผู้เสียภาษี/บัตรประชาชน";
+    } else {
+      const normalizedTaxId = normalizeTaxId(taxId);
+      if (normalizedTaxId.length !== 10 && normalizedTaxId.length !== 13) {
+        errors.taxId = "กรุณากรอกเลขผู้เสียภาษี/บัตรประชาชนให้ถูกต้อง";
+      }
+    }
     if (!vendorAddress.trim()) errors.vendorAddress = "กรุณากรอกที่อยู่ผู้ขาย";
     if (!receiptNo.trim()) errors.receiptNo = "กรุณากรอกเลขที่ใบเสร็จ";
     if (!receiptDate.trim()) errors.receiptDate = "กรุณากรอกวันที่ใบเสร็จ";
@@ -508,6 +532,7 @@ export default function GenerateClient() {
         errors.purpose ||
         errors.budgetAmount ||
         errors.vendorName ||
+        errors.taxId ||
         errors.vendorAddress ||
         errors.receiptNo ||
         errors.receiptDate ||
@@ -545,6 +570,7 @@ export default function GenerateClient() {
         budget_amount: budgetAmount.trim(),
         budget_source: "",
         vendor_name: vendorName.trim(),
+        tax_id: normalizeTaxId(taxId),
         vendor_address: vendorAddress.trim(),
         receipt_no: receiptNo.trim(),
         receipt_date: receiptDate.trim(),
@@ -982,17 +1008,33 @@ export default function GenerateClient() {
                 </div>
               </div>
 
-              <div className={styles.field}>
-                <label htmlFor="vendor_name">บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน</label>
-                <input
-                  id="vendor_name"
-                  name="vendor_name"
-                  type="text"
-                  value={vendorName}
-                  onChange={(event) => setVendorName(event.target.value)}
-                  placeholder="เช่น บริษัท ABC จำกัด"
-                />
-                {validationErrors.vendorName && <p className={styles.fieldError}>{validationErrors.vendorName}</p>}
+              <div className={styles.grid2}>
+                <div className={styles.field}>
+                  <label htmlFor="vendor_name">บริษัท / ห้างหุ้นส่วนจำกัด / ร้าน</label>
+                  <input
+                    id="vendor_name"
+                    name="vendor_name"
+                    type="text"
+                    value={vendorName}
+                    onChange={(event) => setVendorName(event.target.value)}
+                    placeholder="เช่น บริษัท ABC จำกัด"
+                  />
+                  {validationErrors.vendorName && <p className={styles.fieldError}>{validationErrors.vendorName}</p>}
+                </div>
+
+                <div className={styles.field}>
+                  <label htmlFor="tax_id">เลขประจำตัวผู้เสียภาษีอากร/เลขที่บัตรประชาชน</label>
+                  <input
+                    id="tax_id"
+                    name="tax_id"
+                    type="text"
+                    inputMode="numeric"
+                    value={taxId}
+                    onChange={(event) => handleTaxIdChange(event.target.value)}
+                    placeholder="เช่น 010555xxxxxxx หรือ 1-2345-67890-12-3"
+                  />
+                  {validationErrors.taxId && <p className={styles.fieldError}>{validationErrors.taxId}</p>}
+                </div>
               </div>
 
               <div className={styles.field}>
