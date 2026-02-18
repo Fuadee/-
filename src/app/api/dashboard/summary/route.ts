@@ -3,7 +3,17 @@ import { NextResponse } from "next/server";
 import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
-const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "user_id"] as const;
+const DASHBOARD_FIELD_CANDIDATES = [
+  "id",
+  "title",
+  "case_title",
+  "name",
+  "created_at",
+  "status",
+  "user_id",
+  "tax_id",
+  "payload"
+] as const;
 
 export async function GET() {
   const supabase = createSupabaseServer();
