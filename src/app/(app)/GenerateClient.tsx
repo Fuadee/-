@@ -973,7 +973,7 @@ export default function GenerateClient() {
                 </div>
                 <div className={`${styles.field} ${styles.fullWidth}`}>
                   <div className={styles.receiptRow}>
-  <div className={styles.fieldNoMargin}>
+  <div className={`${styles.field} ${styles.fieldNoMargin}`}>
     <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
     <input
       id="receipt_no"
@@ -988,7 +988,7 @@ export default function GenerateClient() {
     )}
   </div>
 
-  <div className={styles.fieldNoMargin}>
+  <div className={`${styles.field} ${styles.fieldNoMargin}`}>
     <label htmlFor="receipt_date">วันที่ใบเสร็จ</label>
     <input
       id="receipt_date"
