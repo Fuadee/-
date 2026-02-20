@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { buildDocxTemplateData } from "@/lib/docxTemplateData";
+import { buildDocxTemplateData, toAssistantHeadDeptLabel } from "@/lib/docxTemplateData";
 import { formatMoneyTH } from "@/lib/money";
 import { toThaiBahtText } from "@/lib/thaiBahtText";
 
@@ -69,6 +69,31 @@ export async function GET() {
     name: "No VAT mode keeps VAT amount as zero",
     actual: String(calcNone.vat_amount),
     expected: String(0)
+  });
+
+  checks.push({
+    name: "toAssistantHeadDeptLabel trims and converts ผ*",
+    actual: toAssistantHeadDeptLabel("  ผปบ.กฟจ.กระบี่  "),
+    expected: "หผ.ปบ.กฟจ.กระบี่"
+  });
+
+  checks.push({
+    name: "toAssistantHeadDeptLabel keeps หผ. prefix as-is",
+    actual: toAssistantHeadDeptLabel("หผ.ปบ.กฟจ.กระบี่"),
+    expected: "หผ.ปบ.กฟจ.กระบี่"
+  });
+
+  checks.push({
+    name: "toAssistantHeadDeptLabel returns empty string for nullable input",
+    actual: toAssistantHeadDeptLabel(undefined),
+    expected: ""
+  });
+
+  const withDepartment = buildDocxTemplateData({ department: "ผกส.กฟจ.กระบี่" });
+  checks.push({
+    name: "buildDocxTemplateData provides dept_asst_head",
+    actual: withDepartment.dept_asst_head,
+    expected: "หผ.กส.กฟจ.กระบี่"
   });
 
   const failures = checks.filter((check) => check.actual !== check.expected);

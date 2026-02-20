@@ -90,6 +90,7 @@ Response:
 
 ```text
 {{department}}
+{{dept_asst_head}}
 {{subject}}
 {{subject_detail}}
 {{purpose}}
@@ -122,6 +123,8 @@ Response:
 ```
 
 > หมายเหตุ: ในข้อมูล item จะยังมี `{{price}}` และ `{{total}}` เป็นสตริงที่ฟอร์แมตแล้วเช่นกัน
+
+> TODO(template.docx): เพิ่ม placeholder `{{dept_asst_head}}` ใกล้บรรทัดแสดงแผนก (`{{department}}`) เพื่อใช้ข้อความรูปแบบ `หผ....` สำหรับตำแหน่งผู้ช่วยหัวหน้าแผนก
 
 ตัวอย่างการวางข้อความในเอกสาร:
 
