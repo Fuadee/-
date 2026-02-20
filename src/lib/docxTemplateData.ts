@@ -254,7 +254,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const grandTotalFmt = formatMoneyTH(grandTotalDisplay);
   const grandTotalText = toThaiBahtText(grandTotalDisplay);
 
-  let paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขออนุมัติเบิกจ่ายค่าซื้อ ${subject} เป็นเงิน ${grandTotalFmt} บาท (${grandTotalText}) (${vatNote}) ให้กับ ร้าน/บริษัท ${vendorName}`;
+  let paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขออนุมัติเบิกจ่ายค่าซื้อ ${subject} เป็นเงิน ${grandTotalFmt} บาท (${grandTotalText}) (${vatNote}) ให้กับ ร้าน/บริษัท ${vendorName} ต่อไป`;
 
   if (paymentMethod === "advance") {
     paymentDetailText = `จึงเรียนมาเพื่อโปรดทราบ และขออนุมัติเบิกจ่ายค่าซื้อ ${subject} เป็นเงิน ${grandTotalFmt} บาท (${grandTotalText}) (${vatNote}) ให้กับ ${assignee} (${assigneeEmpCode}) เนื่องจากได้สำรองจ่ายเงินค่าซื้อฯ ดังกล่าวไปก่อนแล้ว`;
