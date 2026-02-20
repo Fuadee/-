@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { buildDocxTemplateData, toAssistantHeadDeptLabel } from "@/lib/docxTemplateData";
+import { buildDocxTemplateData, toAssistantHeadDeptLabel, toDeptAsstHeadShort } from "@/lib/docxTemplateData";
 import { formatMoneyTH } from "@/lib/money";
 import { toThaiBahtText } from "@/lib/thaiBahtText";
 
@@ -89,11 +89,35 @@ export async function GET() {
     expected: ""
   });
 
+  checks.push({
+    name: "toDeptAsstHeadShort returns short label",
+    actual: toDeptAsstHeadShort("หผ.ปบ.กฟจ.กระบี่"),
+    expected: "หผ.ปบ."
+  });
+
+  checks.push({
+    name: "toDeptAsstHeadShort returns empty for หผ.สน.",
+    actual: toDeptAsstHeadShort("หผ.สน.กฟจ.กระบี่"),
+    expected: ""
+  });
+
+  checks.push({
+    name: "toDeptAsstHeadShort returns empty for null",
+    actual: toDeptAsstHeadShort(null),
+    expected: ""
+  });
+
   const withDepartment = buildDocxTemplateData({ department: "ผกส.กฟจ.กระบี่" });
   checks.push({
     name: "buildDocxTemplateData provides dept_asst_head",
     actual: withDepartment.dept_asst_head,
     expected: "หผ.กส.กฟจ.กระบี่"
+  });
+
+  checks.push({
+    name: "buildDocxTemplateData provides dept_asst_head_short",
+    actual: withDepartment.dept_asst_head_short,
+    expected: "หผ.กส."
   });
 
   const failures = checks.filter((check) => check.actual !== check.expected);
