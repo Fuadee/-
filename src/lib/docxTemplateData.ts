@@ -188,7 +188,7 @@ export const toDeptAsstHeadShort = (input?: string | null): string => {
 
   const matchedUnit = trimmed.match(/^หผ\.([^.]+)\./u);
   if (matchedUnit?.[1]) {
-    return `หผ.${matchedUnit[1]}.`;
+    return `หผ.${matchedUnit[1]}.,`;
   }
 
   return "";
