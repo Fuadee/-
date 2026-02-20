@@ -4,7 +4,7 @@ export const VAT_RATE_DECIMAL = 0.07;
 
 export const getVatModeLabel = (vatMode: VatMode | null): string => {
   if (vatMode === "included") return "รวม VAT";
-  if (vatMode === "excluded") return "แยก VAT";
+  if (vatMode === "excluded") return "ไม่รวม VAT";
   if (vatMode === "none") return "ไม่มี VAT";
   return "ยังไม่ได้เลือก";
 };

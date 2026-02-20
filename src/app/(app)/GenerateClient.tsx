@@ -405,7 +405,7 @@ export default function GenerateClient() {
   const vatModeLabel = getVatModeLabel(vatMode);
   const unitPriceColumnLabel = getUnitPriceColumnLabel(vatMode);
   const vatModeHelperText = getVatModeHelperText(vatMode);
-  const vatModeMissingError = "กรุณาเลือกโหมด VAT ก่อน (รวม VAT / แยก VAT / ไม่มี VAT)";
+  const vatModeMissingError = "กรุณาเลือกโหมด VAT ก่อน (รวม VAT / ไม่รวม VAT / ไม่มี VAT)";
   const shouldShowVatModeError = Boolean(validationErrors.vatMode) || !vatMode;
 
   const itemErrors = useMemo(
@@ -1161,7 +1161,7 @@ export default function GenerateClient() {
                       checked={vatMode === "excluded"}
                       onChange={() => setVatMode("excluded")}
                     />
-                    <span>แยก VAT 7%</span>
+                    <span>ไม่รวม VAT 7%</span>
                   </label>
                   <label className={styles.vatRadioItem}>
                     <input
