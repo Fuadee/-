@@ -142,6 +142,34 @@ const buildReceiptNoDateLine = (receiptNo: string, receiptDateThai: string): str
   return "";
 };
 
+/**
+ * แปลงชื่อแผนกสำหรับตำแหน่งผู้ช่วยหัวหน้าแผนก
+ *
+ * ตัวอย่าง:
+ * - ผปบ.กฟจ.กระบี่ => หผ.ปบ.กฟจ.กระบี่
+ * - ผกส.กฟจ.กระบี่ => หผ.กส.กฟจ.กระบี่
+ * - หผ.ปบ.กฟจ.กระบี่ => หผ.ปบ.กฟจ.กระบี่
+ * - "  ผปบ.กฟจ.กระบี่  " => หผ.ปบ.กฟจ.กระบี่
+ * - "" / null / undefined => ""
+ */
+export const toAssistantHeadDeptLabel = (input?: string | null): string => {
+  const trimmed = input?.trim() ?? "";
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.startsWith("หผ.")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("ผ")) {
+    return `หผ.${trimmed.slice(1)}`;
+  }
+
+  return trimmed;
+};
+
 export const buildDocxTemplateData = (body: GeneratePayload) => {
   const receiptNo = body.receipt_no?.trim() ?? "";
   const receiptDate = formatThaiDateBE(body.receipt_date);
@@ -221,6 +249,8 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const subject = body.subject ?? "";
   const vendorName = body.vendor_name ?? "";
   const assignee = body.assignee ?? "";
+  const department = body.department?.trim() ?? "";
+  const assistantHeadDepartment = toAssistantHeadDeptLabel(body.department);
   const grandTotalFmt = formatMoneyTH(grandTotalDisplay);
   const grandTotalText = toThaiBahtText(grandTotalDisplay);
 
@@ -235,7 +265,8 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   }
 
   return {
-    department: body.department ?? "",
+    department,
+    dept_asst_head: assistantHeadDepartment,
     subject: body.subject ?? "",
     subject_detail: body.subject_detail ?? "",
     purpose: body.purpose ?? "",
