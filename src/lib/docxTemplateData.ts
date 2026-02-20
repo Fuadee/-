@@ -170,6 +170,30 @@ export const toAssistantHeadDeptLabel = (input?: string | null): string => {
   return trimmed;
 };
 
+/**
+ * สร้างชื่อย่อผู้ช่วยหัวหน้าแผนกสำหรับ DOCX placeholder {{dept_asst_head_short}}
+ *
+ * ตัวอย่าง:
+ * - "หผ.ปบ.กฟจ.กระบี่" => "หผ.ปบ."
+ * - "หผ.กส.กฟจ.กระบี่" => "หผ.กส."
+ * - "หผ.สน.กฟจ.กระบี่" => ""
+ * - null / undefined / "" => ""
+ */
+export const toDeptAsstHeadShort = (input?: string | null): string => {
+  const trimmed = input?.trim() ?? "";
+
+  if (!trimmed || trimmed.startsWith("หผ.สน.")) {
+    return "";
+  }
+
+  const matchedUnit = trimmed.match(/^หผ\.([^.]+)\./u);
+  if (matchedUnit?.[1]) {
+    return `หผ.${matchedUnit[1]}.`;
+  }
+
+  return "";
+};
+
 export const buildDocxTemplateData = (body: GeneratePayload) => {
   const receiptNo = body.receipt_no?.trim() ?? "";
   const receiptDate = formatThaiDateBE(body.receipt_date);
@@ -251,6 +275,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   const assignee = body.assignee ?? "";
   const department = body.department?.trim() ?? "";
   const assistantHeadDepartment = toAssistantHeadDeptLabel(body.department);
+  const assistantHeadDepartmentShort = toDeptAsstHeadShort(assistantHeadDepartment);
   const grandTotalFmt = formatMoneyTH(grandTotalDisplay);
   const grandTotalText = toThaiBahtText(grandTotalDisplay);
 
@@ -267,6 +292,7 @@ export const buildDocxTemplateData = (body: GeneratePayload) => {
   return {
     department,
     dept_asst_head: assistantHeadDepartment,
+    dept_asst_head_short: assistantHeadDepartmentShort,
     subject: body.subject ?? "",
     subject_detail: body.subject_detail ?? "",
     purpose: body.purpose ?? "",
