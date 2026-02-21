@@ -4,27 +4,31 @@ import DashboardSummary from "./DashboardSummary";
 
 export default function DashboardPage() {
   return (
-    <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-gradient-to-br from-slate-50 via-purple-50 to-slate-100 px-4 py-10 sm:px-6">
+    <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-[var(--bg)] px-4 py-8 sm:px-6 sm:py-10">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-16 h-64 w-64 -translate-x-1/2 rounded-full bg-purple-300/20 blur-3xl" />
+        <div className="absolute -top-20 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-purple-300/15 blur-3xl" />
+        <div className="absolute right-0 top-32 h-56 w-56 rounded-full bg-fuchsia-200/20 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-5xl rounded-2xl border border-white/60 bg-white/70 p-6 shadow-md backdrop-blur sm:p-8">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="relative mx-auto w-full max-w-6xl rounded-3xl border border-[color:var(--border)] bg-white/75 p-5 shadow-[var(--soft-shadow)] backdrop-blur-xl sm:p-8">
+        <div className="mb-8 flex flex-col gap-4 border-b border-[color:var(--border)] pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">Dashboard</h1>
-            <p className="mt-2 text-sm text-slate-600">ภาพรวมงานเอกสารล่าสุดและสถานะการดำเนินการ</p>
+            <span className="mb-3 inline-flex rounded-full border border-purple-100 bg-purple-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.12em] text-purple-700">
+              Latest jobs
+            </span>
+            <h1 className="text-4xl font-semibold tracking-[-0.02em] text-slate-900">Dashboard</h1>
+            <p className="mt-2 text-sm text-slate-500">ภาพรวมงานเอกสารล่าสุดและสถานะการดำเนินการ</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/"
-              className="rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:brightness-110"
+              className="focus-ring inline-flex items-center rounded-xl bg-[image:var(--accent-glow)] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(147,51,234,0.34)] transition hover:brightness-105 active:translate-y-px"
             >
               ไปหน้า Generate
             </Link>
             <Link
               href="/dashboard"
-              className="rounded-xl border border-purple-100 bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+              className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               รีเฟรช
             </Link>

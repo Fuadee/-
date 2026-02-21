@@ -53,16 +53,22 @@ export default function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]" />
-          <span className="bg-gradient-to-r from-slate-900 to-slate-500 bg-clip-text text-sm font-semibold tracking-wide text-transparent sm:text-base">
+    <header className="sticky top-0 z-50 border-b border-[color:var(--border)]/80 bg-white/80 backdrop-blur-xl">
+      <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
+        <Link href="/" className="focus-ring inline-flex items-center gap-2 rounded-full px-1 py-1">
+          <span className="relative inline-flex h-3 w-3">
+            <span className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-orange-400" />
+            <span className="absolute -inset-1.5 rounded-full bg-violet-400/40 blur-sm" />
+          </span>
+          <span className="bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-sm font-semibold tracking-[0.02em] text-transparent sm:text-base">
             DOCX Generator
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 p-1 md:flex" aria-label="Primary">
+        <nav
+          className="order-3 flex w-full items-center gap-1 rounded-full border border-[color:var(--border)] bg-white/85 p-1 shadow-[var(--soft-shadow)] sm:order-2 sm:w-auto"
+          aria-label="Primary"
+        >
           {navLinks.map((link) => {
             const isActive = pathname === link.href;
 
@@ -70,8 +76,10 @@ export default function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                  isActive ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                className={`focus-ring flex-1 rounded-full px-4 py-1.5 text-center text-sm font-medium transition sm:flex-none ${
+                  isActive
+                    ? "bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-[0_8px_20px_rgba(124,58,237,0.28)]"
+                    : "text-slate-700 hover:bg-purple-50 hover:text-slate-900"
                 }`}
               >
                 {link.label}
@@ -80,18 +88,19 @@ export default function Navbar() {
           })}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="order-2 flex items-center gap-2 sm:order-3">
           {authState.loading ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-500">Loading...</span>
           ) : authState.user ? (
             <>
-              <span className="max-w-44 truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-sm text-slate-700">
-                {authState.user.email}
+              <span className="inline-flex max-w-48 items-center gap-2 rounded-full border border-[color:var(--border)] bg-white px-3 py-1.5 text-xs text-slate-700 shadow-sm sm:text-sm">
+                <span className="h-2 w-2 rounded-full bg-violet-500/80" />
+                <span className="truncate">{authState.user.email}</span>
               </span>
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+                className="focus-ring rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 sm:text-sm"
               >
                 Sign out
               </button>
@@ -99,7 +108,7 @@ export default function Navbar() {
           ) : (
             <Link
               href="/login"
-              className="rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110"
+              className="focus-ring rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110"
             >
               Login
             </Link>
