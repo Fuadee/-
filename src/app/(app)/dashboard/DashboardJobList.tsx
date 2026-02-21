@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -125,6 +125,33 @@ const getStatusLabel = (status: EffectiveStatus): string =>
     needs_fix: "รอการแก้ไข"
   })[status];
 
+const statusClassName: Record<EffectiveStatus, string> = {
+  pending_approval: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
+  pending_review: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
+  awaiting_payment: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 focus-visible:ring-emerald-300",
+  needs_fix: "border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300"
+};
+
+type KpiCardProps = {
+  label: string;
+  value: number;
+  accent: string;
+  icon: ReactNode;
+};
+
+function KpiCard({ label, value, accent, icon }: KpiCardProps) {
+  return (
+    <div className="group rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-[var(--soft-shadow)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(124,58,237,0.15)]">
+      <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full ${accent} text-white shadow-sm`}>{icon}</div>
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
+      <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${accent} opacity-60`} style={{ width: value > 0 ? "68%" : "18%" }} />
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardJobList({ jobs, table, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
@@ -143,22 +170,6 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   const totalCount = items.length;
   const pendingReviewCount = items.filter((item) => normalizeStatus(item.status) === "pending_review").length;
   const needsFixCount = items.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
-
-  const getStatusClassName = (status: EffectiveStatus) => {
-    if (status === "pending_review") {
-      return "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100 focus-visible:ring-amber-300";
-    }
-
-    if (status === "needs_fix") {
-      return "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100 focus-visible:ring-rose-300";
-    }
-
-    if (status === "awaiting_payment") {
-      return "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 focus-visible:ring-emerald-300";
-    }
-
-    return "border-purple-200 bg-purple-50 text-purple-700 hover:border-purple-300 hover:bg-purple-100 focus-visible:ring-purple-300";
-  };
 
   const handleStatusClick = (job: DashboardJobItem, status: EffectiveStatus) => {
     const id = String(job.id ?? "");
@@ -212,17 +223,18 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-purple-200 bg-white/75 p-10 text-center shadow-sm backdrop-blur">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 text-purple-600">
+      <div className="rounded-3xl border border-dashed border-[color:var(--border)] bg-white/90 p-10 text-center shadow-[var(--soft-shadow)]">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-100 via-fuchsia-100 to-orange-100 text-purple-700">
           <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="1.6">
             <path d="M8 8h8M8 12h8M8 16h5" strokeLinecap="round" />
             <path d="M6 3h9l3 3v15H6z" strokeLinejoin="round" />
           </svg>
         </div>
         <p className="text-lg font-medium text-slate-800">ยังไม่มีงานที่สร้างเอกสาร</p>
+        <p className="mt-1 text-sm text-slate-500">เริ่มต้นสร้างงานแรกของคุณเพื่อให้ Dashboard แสดงผลแบบเต็ม</p>
         <Link
           href="/"
-          className="mt-6 inline-flex rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:brightness-110"
+          className="focus-ring mt-6 inline-flex rounded-xl bg-[image:var(--accent-glow)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(147,51,234,0.3)] transition hover:brightness-105"
         >
           สร้างงานใหม่
         </Link>
@@ -233,37 +245,40 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   return (
     <>
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-purple-100 bg-white/80 p-4 shadow-sm">
-          <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+        <KpiCard
+          label="ทั้งหมด"
+          value={totalCount}
+          accent="bg-gradient-to-br from-violet-500 to-purple-500"
+          icon={
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <circle cx="12" cy="12" r="8" />
             </svg>
-          </div>
-          <p className="text-sm text-slate-500">ทั้งหมด</p>
-          <p className="text-2xl font-semibold text-slate-900">{totalCount}</p>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-white/80 p-4 shadow-sm">
-          <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          }
+        />
+        <KpiCard
+          label="รอตรวจ"
+          value={pendingReviewCount}
+          accent="bg-gradient-to-br from-amber-400 to-orange-400"
+          icon={
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <path d="M12 3 2 21h20L12 3zm0 6a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0v-4a1 1 0 0 1 1-1zm0 10a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z" />
             </svg>
-          </div>
-          <p className="text-sm text-slate-500">รอตรวจ</p>
-          <p className="text-2xl font-semibold text-slate-900">{pendingReviewCount}</p>
-        </div>
-        <div className="rounded-2xl border border-rose-100 bg-white/80 p-4 shadow-sm">
-          <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+          }
+        />
+        <KpiCard
+          label="รอการแก้ไข"
+          value={needsFixCount}
+          accent="bg-gradient-to-br from-rose-500 to-fuchsia-500"
+          icon={
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.54 13.46a1 1 0 0 1-1.42 1.42L12 14.76l-2.12 2.12a1 1 0 0 1-1.42-1.42L10.58 13 8.46 10.88a1 1 0 1 1 1.42-1.42L12 11.58l2.12-2.12a1 1 0 0 1 1.42 1.42L13.42 13z" />
             </svg>
-          </div>
-          <p className="text-sm text-slate-500">รอการแก้ไข</p>
-          <p className="text-2xl font-semibold text-slate-900">{needsFixCount}</p>
-        </div>
+          }
+        />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-white/70 bg-white/80 shadow-sm backdrop-blur">
-        <div className="hidden grid-cols-12 gap-3 border-b border-purple-100 bg-purple-50/70 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 sm:grid">
+      <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
+        <div className="hidden grid-cols-12 gap-3 border-b border-[color:var(--border)] bg-purple-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
           <p className="col-span-5">ชื่องาน</p>
           <p className="col-span-3">สร้างเมื่อ</p>
           <p className="col-span-2">สถานะ</p>
@@ -276,10 +291,8 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
             const id = String(job.id ?? "");
 
             return (
-              <div
-                key={id}
-                className="grid gap-3 px-5 py-4 transition hover:-translate-y-0.5 hover:border-purple-200 hover:bg-purple-50/40 sm:grid-cols-12 sm:items-center"
-              >
+              <div key={id} className="group relative grid gap-4 px-5 py-4 transition hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6">
+                <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
                 <div className="sm:col-span-5">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
                   <p className="font-semibold text-slate-900">{getJobTitle(job)}</p>
@@ -294,7 +307,7 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
                   <button
                     type="button"
                     onClick={() => handleStatusClick(job, status)}
-                    className={`rounded-full border px-3 py-1 text-sm font-medium transition focus:outline-none focus-visible:ring-2 ${getStatusClassName(status)}`}
+                    className={`focus-ring rounded-full border px-3 py-1 text-sm font-medium transition ${statusClassName[status]}`}
                   >
                     {getStatusLabel(status)}
                   </button>
@@ -303,13 +316,13 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
                   <p className="w-full text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">การทำงาน</p>
                   <Link
                     href={`/?job=${encodeURIComponent(id)}`}
-                    className="text-sm font-medium text-purple-700 transition hover:text-purple-900"
+                    className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
                   >
                     แก้ไขงานนี้ →
                   </Link>
                   <Link
                     href={`/?job=${encodeURIComponent(id)}`}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                    className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                   >
                     ดูรายละเอียด
                   </Link>
