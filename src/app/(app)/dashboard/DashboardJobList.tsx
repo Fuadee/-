@@ -62,7 +62,11 @@ const normalizeStatus = (value: unknown): EffectiveStatus => {
     return "pending_approval";
   }
 
-  if (trimmed === "pending_review" || trimmed === "awaiting_payment" || trimmed === "needs_fix" || trimmed === "pending_approval") {
+  if (trimmed === "ดำเนินการแล้วเสร็จ") {
+    return "completed";
+  }
+
+  if (trimmed === "pending_review" || trimmed === "awaiting_payment" || trimmed === "needs_fix" || trimmed === "pending_approval" || trimmed === "completed") {
     return trimmed;
   }
 
@@ -121,14 +125,16 @@ const getStatusLabel = (status: EffectiveStatus): string =>
     pending_approval: "รออนุมัติ",
     pending_review: "รอตรวจ",
     awaiting_payment: "รอเบิกจ่าย",
-    needs_fix: "รอการแก้ไข"
+    needs_fix: "รอการแก้ไข",
+    completed: "ดำเนินการแล้วเสร็จ"
   })[status];
 
 const statusClassName: Record<EffectiveStatus, string> = {
   pending_approval: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
   pending_review: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
   awaiting_payment: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 focus-visible:ring-emerald-300",
-  needs_fix: "border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300"
+  needs_fix: "border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300",
+  completed: "border-sky-100 bg-sky-50 text-sky-700 hover:bg-sky-100 focus-visible:ring-sky-300"
 };
 
 type KpiCardProps = {
@@ -162,7 +168,10 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   );
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
   const totalCount = items.length;
   const pendingReviewCount = items.filter((item) => normalizeStatus(item.status) === "pending_review").length;
@@ -183,6 +192,8 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
       grandTotal: getGrandTotal(payload.items)
     });
     setErrorMessage(null);
+    setPaymentErrorMessage(null);
+    setPaymentSuccessMessage(null);
   };
 
   const handleUpdateStatus = async (nextStatus: EffectiveStatus) => {
@@ -217,6 +228,46 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
     setDialog(null);
     setIsSaving(false);
     router.refresh();
+  };
+
+  const handleMarkPaymentDone = async () => {
+    if (!dialog || isPaymentProcessing || dialog.status !== "awaiting_payment") {
+      return;
+    }
+
+    if (hasUserIdColumn && !currentUserId) {
+      setPaymentErrorMessage("ไม่พบผู้ใช้งานปัจจุบัน จึงไม่สามารถยืนยันการเบิกจ่ายได้");
+      return;
+    }
+
+    setIsPaymentProcessing(true);
+    setPaymentErrorMessage(null);
+    setPaymentSuccessMessage(null);
+
+    const response = await fetch(`/api/jobs/${encodeURIComponent(dialog.id)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ action: "mark_payment_done" })
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      setPaymentErrorMessage(payload?.message ?? "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่");
+      setIsPaymentProcessing(false);
+      return;
+    }
+
+    setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: "completed" } : item)));
+    setPaymentSuccessMessage("ส่งแจ้งเตือนแล้ว ✅");
+
+    window.setTimeout(() => {
+      setDialog(null);
+      setPaymentSuccessMessage(null);
+      setIsPaymentProcessing(false);
+      router.refresh();
+    }, 800);
   };
 
   if (items.length === 0) {
@@ -346,9 +397,22 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
         taxId={dialog?.taxId ?? ""}
         grandTotal={dialog?.grandTotal ?? null}
         isSaving={isSaving}
+        isPaymentProcessing={isPaymentProcessing}
         errorMessage={errorMessage}
-        onClose={() => setDialog(null)}
+        paymentErrorMessage={paymentErrorMessage}
+        paymentSuccessMessage={paymentSuccessMessage}
+        onClose={() => {
+          if (isSaving || isPaymentProcessing) {
+            return;
+          }
+
+          setDialog(null);
+          setErrorMessage(null);
+          setPaymentErrorMessage(null);
+          setPaymentSuccessMessage(null);
+        }}
         onUpdateStatus={handleUpdateStatus}
+        onMarkPaymentDone={handleMarkPaymentDone}
       />
     </>
   );

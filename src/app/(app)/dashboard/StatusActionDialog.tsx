@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type EffectiveStatus = "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix";
+type EffectiveStatus = "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
 
 type StatusActionDialogProps = {
   open: boolean;
@@ -13,9 +13,13 @@ type StatusActionDialogProps = {
   taxId: string;
   grandTotal: number | null;
   isSaving: boolean;
+  isPaymentProcessing: boolean;
   errorMessage: string | null;
+  paymentErrorMessage: string | null;
+  paymentSuccessMessage: string | null;
   onClose: () => void;
   onUpdateStatus: (nextStatus: EffectiveStatus) => void;
+  onMarkPaymentDone: () => void;
 };
 
 type CopyRow = {
@@ -146,9 +150,13 @@ export default function StatusActionDialog({
   taxId,
   grandTotal,
   isSaving,
+  isPaymentProcessing,
   errorMessage,
+  paymentErrorMessage,
+  paymentSuccessMessage,
   onClose,
-  onUpdateStatus
+  onUpdateStatus,
+  onMarkPaymentDone
 }: StatusActionDialogProps) {
   if (!open) {
     return null;
@@ -255,14 +263,6 @@ export default function StatusActionDialog({
                 disabled={isSaving}
                 className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
                 ยัง
               </button>
               <button
@@ -279,7 +279,49 @@ export default function StatusActionDialog({
 
         {status === "awaiting_payment" ? (
           <>
-            <h2 className="text-lg font-semibold text-slate-900">สถานะรอเบิกจ่าย</h2>
+            <h2 className="text-lg font-semibold text-slate-900">สถานะ: รอเบิกจ่าย</h2>
+            <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
+
+            {paymentErrorMessage ? (
+              <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{paymentErrorMessage}</p>
+            ) : null}
+
+            {paymentSuccessMessage ? (
+              <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{paymentSuccessMessage}</p>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isPaymentProcessing}
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ปิด
+              </button>
+              <button
+                type="button"
+                onClick={onMarkPaymentDone}
+                disabled={isPaymentProcessing}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(147,51,234,0.35)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isPaymentProcessing ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden="true" />
+                    กำลังส่ง LINE...
+                  </>
+                ) : (
+                  "ดำเนินการเบิกจ่ายแล้ว"
+                )}
+              </button>
+            </div>
+          </>
+        ) : null}
+
+
+        {status === "completed" ? (
+          <>
+            <h2 className="text-lg font-semibold text-slate-900">ดำเนินการแล้วเสร็จ</h2>
             <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
 
             <div className="mt-6 flex justify-end">
