@@ -7,6 +7,9 @@ import DashboardJobList from "./DashboardJobList";
 
 type DashboardSummaryResponse = {
   jobs: JobRecord[];
+  summary: {
+    completedCount: number;
+  };
   table: string;
   hasUserIdColumn: boolean;
   currentUserId: string | null;
@@ -74,6 +77,7 @@ export default function DashboardSummary() {
   return (
     <DashboardJobList
       jobs={data.jobs}
+      initialCompletedCount={data.summary.completedCount}
       table={data.table}
       hasUserIdColumn={data.hasUserIdColumn}
       currentUserId={data.currentUserId}
