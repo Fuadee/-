@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendLineGroupNotification } from "@/lib/line";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
+import { calculateVatBreakdown, type VatMode } from "@/lib/vat";
 
 type UpdateStatusPayload = {
   status?: string;
@@ -20,19 +21,55 @@ const parseJobPayload = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+const toFiniteNumber = (value: unknown): number | null => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const pickFirstFiniteNumber = (sources: unknown[], keys: string[]): number | null => {
+  for (const source of sources) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      continue;
+    }
+
+    for (const key of keys) {
+      const amount = toFiniteNumber((source as Record<string, unknown>)[key]);
+      if (amount !== null) {
+        return amount;
+      }
+    }
+  }
+
+  return null;
+};
+
 const getGrandTotalFromPayload = (payload: Record<string, unknown>): number | null => {
   const rawItems = payload.items;
   if (!Array.isArray(rawItems)) {
     return null;
   }
 
+  const vatModeRaw = payload.vat_mode;
+  const vatMode: VatMode = vatModeRaw === "included" || vatModeRaw === "excluded" || vatModeRaw === "none" ? vatModeRaw : "included";
+
   const total = rawItems.reduce((sum, item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       return sum;
     }
 
-    const amount = Number((item as Record<string, unknown>).amount);
-    return Number.isFinite(amount) ? sum + amount : sum;
+    const row = item as Record<string, unknown>;
+    const lineTotal =
+      toFiniteNumber(row.total) ??
+      toFiniteNumber(row.line_total_num) ??
+      toFiniteNumber(row.total_num) ??
+      ((toFiniteNumber(row.qty) ?? 0) * (toFiniteNumber(row.price) ?? 0));
+
+    if (!Number.isFinite(lineTotal)) {
+      return sum;
+    }
+
+    const breakdown = calculateVatBreakdown(lineTotal, vatMode);
+    return sum + breakdown.total;
   }, 0);
 
   return Number.isFinite(total) ? total : null;
@@ -64,8 +101,33 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
     asTrimmedString(job.title) ||
     asTrimmedString(job.case_title) ||
     "-";
-  const amount = formatAmount(getGrandTotalFromPayload(payload));
-  const operatorName = asTrimmedString(user.user_metadata?.full_name) || asTrimmedString(user.email) || "-";
+  // Prefer persisted net/grand total fields from job/payload before falling back to server-side VAT calculation.
+  const amount = formatAmount(
+    pickFirstFiniteNumber(
+      [job, payload],
+      ["total_net", "net_total", "grand_total", "total", "total_amount", "subtotal_incl_vat", "amount"]
+    ) ?? getGrandTotalFromPayload(payload)
+  );
+
+  // Prefer assignee display name from document fields (ผู้ได้รับมอบหมาย), then owner/display name, then current user email.
+  const operatorName =
+    asTrimmedString(payload.assignee) ||
+    asTrimmedString(job.assignee) ||
+    asTrimmedString(payload.assignee_name) ||
+    asTrimmedString(job.assignee_name) ||
+    asTrimmedString(payload.assigned_to_name) ||
+    asTrimmedString(job.assigned_to_name) ||
+    asTrimmedString(payload.receiver_name) ||
+    asTrimmedString(job.receiver_name) ||
+    asTrimmedString(payload.recipient_name) ||
+    asTrimmedString(job.recipient_name) ||
+    asTrimmedString(payload.delegate_name) ||
+    asTrimmedString(job.delegate_name) ||
+    asTrimmedString(payload.owner_name) ||
+    asTrimmedString(job.owner_name) ||
+    asTrimmedString(user.user_metadata?.full_name) ||
+    asTrimmedString(user.email) ||
+    "-";
 
   return [
     "✅ ดำเนินการเบิกจ่ายแล้ว",
