@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
-import { createSupabaseBrowser } from "@/lib/supabase/client";
 import StatusActionDialog, { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
@@ -154,8 +153,6 @@ function KpiCard({ label, value, accent, icon }: KpiCardProps) {
 
 export default function DashboardJobList({ jobs, table, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
   const router = useRouter();
-  const supabase = useMemo(() => createSupabaseBrowser(), []);
-
   const [items, setItems] = useState<DashboardJobItem[]>(
     jobs.map((job) => ({
       ...job,
@@ -201,16 +198,17 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
     setIsSaving(true);
     setErrorMessage(null);
 
-    let query = supabase.from(table).update({ status: nextStatus }).eq("id", dialog.id);
+    const response = await fetch(`/api/jobs/${encodeURIComponent(dialog.id)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status: nextStatus })
+    });
 
-    if (hasUserIdColumn) {
-      query = query.eq("user_id", currentUserId);
-    }
-
-    const { error } = await query;
-
-    if (error) {
-      setErrorMessage(`อัปเดตสถานะไม่สำเร็จ: ${error.message}`);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      setErrorMessage(payload?.message ?? "อัปเดตสถานะไม่สำเร็จ");
       setIsSaving(false);
       return;
     }
