@@ -10,7 +10,11 @@ const config: Config = {
     "./pages/**/*.{js,ts,jsx,tsx,mdx}"
   ],
   theme: {
-    extend: {}
+    extend: {
+      transitionDuration: {
+        250: "250ms"
+      }
+    }
   },
   plugins: []
 };

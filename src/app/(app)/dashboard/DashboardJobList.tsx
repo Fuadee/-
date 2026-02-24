@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
@@ -17,6 +16,7 @@ type DashboardJobListProps = {
 type DashboardJobItem = JobRecord & {
   id: string;
   status: EffectiveStatus;
+  isRemoving: boolean;
 };
 
 type DialogState = {
@@ -158,12 +158,17 @@ function KpiCard({ label, value, accent, icon }: KpiCardProps) {
 }
 
 export default function DashboardJobList({ jobs, table, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
-  const router = useRouter();
+  const nonCompletedJobs = useMemo(
+    () => jobs.filter((job) => normalizeStatus(job.status) !== "completed"),
+    [jobs]
+  );
+
   const [items, setItems] = useState<DashboardJobItem[]>(
-    jobs.map((job) => ({
+    nonCompletedJobs.map((job) => ({
       ...job,
       id: String(job.id ?? ""),
-      status: normalizeStatus(job.status)
+      status: normalizeStatus(job.status),
+      isRemoving: false
     }))
   );
   const [dialog, setDialog] = useState<DialogState>(null);
@@ -173,9 +178,18 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
-  const totalCount = items.length;
-  const pendingReviewCount = items.filter((item) => normalizeStatus(item.status) === "pending_review").length;
-  const needsFixCount = items.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
+  const activeItems = useMemo(() => items.filter((item) => !item.isRemoving), [items]);
+  const totalCount = activeItems.length;
+  const pendingReviewCount = activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
+  const needsFixCount = activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
+
+  const markJobCompleted = (jobId: string) => {
+    setItems((prev) => prev.map((item) => (item.id === jobId ? { ...item, status: "completed", isRemoving: true } : item)));
+
+    window.setTimeout(() => {
+      setItems((prev) => prev.filter((item) => item.id !== jobId));
+    }, 250);
+  };
 
   const handleStatusClick = (job: DashboardJobItem, status: EffectiveStatus) => {
     const id = String(job.id ?? "");
@@ -224,10 +238,14 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
       return;
     }
 
-    setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: nextStatus } : item)));
+    if (nextStatus === "completed") {
+      markJobCompleted(dialog.id);
+    } else {
+      setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: nextStatus } : item)));
+    }
+
     setDialog(null);
     setIsSaving(false);
-    router.refresh();
   };
 
   const handleMarkPaymentDone = async () => {
@@ -259,14 +277,13 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
       return;
     }
 
-    setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: "completed" } : item)));
+    markJobCompleted(dialog.id);
     setPaymentSuccessMessage("ส่งแจ้งเตือนแล้ว ✅");
 
     window.setTimeout(() => {
       setDialog(null);
       setPaymentSuccessMessage(null);
       setIsPaymentProcessing(false);
-      router.refresh();
     }, 800);
   };
 
@@ -340,7 +357,12 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
             const id = String(job.id ?? "");
 
             return (
-              <div key={id} className="group relative grid gap-4 px-5 py-4 transition hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6">
+              <div
+                key={id}
+                className={`group relative grid gap-4 px-5 py-4 transition-all duration-250 ease-out hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6 ${
+                  job.isRemoving ? "pointer-events-none translate-y-0.5 opacity-0" : ""
+                }`}
+              >
                 <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
                 <div className="sm:col-span-5">
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
