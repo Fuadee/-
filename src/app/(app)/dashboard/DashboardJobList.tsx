@@ -16,8 +16,10 @@ type DashboardJobListProps = {
 type DashboardJobItem = JobRecord & {
   id: string;
   status: EffectiveStatus;
-  isRemoving: boolean;
+  isRemoving?: boolean;
 };
+
+type DashboardTab = "active" | "completed";
 
 type DialogState = {
   id: string;
@@ -34,6 +36,10 @@ type JobPayload = {
   vendor_name?: unknown;
   tax_id?: unknown;
   items?: unknown;
+};
+
+type CompletedJobsResponse = {
+  jobs: JobRecord[];
 };
 
 const formatDate = (value: unknown) => {
@@ -71,6 +77,11 @@ const normalizeStatus = (value: unknown): EffectiveStatus => {
   }
 
   return "pending_approval";
+};
+
+const isCompletedStatus = (job: Pick<DashboardJobItem, "status">): boolean => {
+  const normalized = normalizeStatus(job.status);
+  return normalized === "completed";
 };
 
 const asTrimmedString = (value: unknown): string => {
@@ -157,20 +168,20 @@ function KpiCard({ label, value, accent, icon }: KpiCardProps) {
   );
 }
 
-export default function DashboardJobList({ jobs, table, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
-  const nonCompletedJobs = useMemo(
-    () => jobs.filter((job) => normalizeStatus(job.status) !== "completed"),
-    [jobs]
-  );
+const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
+  ...job,
+  id: String(job.id ?? ""),
+  status: normalizeStatus(job.status),
+  isRemoving: false
+});
 
-  const [items, setItems] = useState<DashboardJobItem[]>(
-    nonCompletedJobs.map((job) => ({
-      ...job,
-      id: String(job.id ?? ""),
-      status: normalizeStatus(job.status),
-      isRemoving: false
-    }))
-  );
+export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
+  const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
+  const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
+  const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
+  const [isCompletedLoading, setIsCompletedLoading] = useState(false);
+  const [completedError, setCompletedError] = useState<string | null>(null);
+
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
@@ -178,16 +189,81 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
 
-  const activeItems = useMemo(() => items.filter((item) => !item.isRemoving), [items]);
+  const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
+  const completedItems = useMemo(() => {
+    const base = completedItemsCache ?? [];
+    return base.filter((item) => isCompletedStatus(item) && !item.isRemoving);
+  }, [completedItemsCache]);
+
   const totalCount = activeItems.length;
   const pendingReviewCount = activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
   const needsFixCount = activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
 
+  const fetchCompletedItems = async () => {
+    if (completedItemsCache || isCompletedLoading) {
+      return;
+    }
+
+    setIsCompletedLoading(true);
+    setCompletedError(null);
+
+    try {
+      const response = await fetch("/api/dashboard/completed", {
+        method: "GET",
+        cache: "no-store"
+      });
+
+      const payload = (await response.json()) as CompletedJobsResponse | { message?: string };
+
+      if (!response.ok) {
+        const message = "message" in payload && payload.message ? payload.message : "โหลดงานที่เสร็จแล้วไม่สำเร็จ";
+        throw new Error(message);
+      }
+
+      setCompletedItemsCache((payload as CompletedJobsResponse).jobs.map(toDashboardItem));
+    } catch (err) {
+      setCompletedError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
+    } finally {
+      setIsCompletedLoading(false);
+    }
+  };
+
+  const handleTabChange = (nextTab: DashboardTab) => {
+    setCurrentTab(nextTab);
+
+    if (nextTab === "completed") {
+      void fetchCompletedItems();
+    }
+  };
+
   const markJobCompleted = (jobId: string) => {
-    setItems((prev) => prev.map((item) => (item.id === jobId ? { ...item, status: "completed", isRemoving: true } : item)));
+    let movedItem: DashboardJobItem | null = null;
+
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== jobId) {
+          return item;
+        }
+
+        movedItem = { ...item, status: "completed", isRemoving: true };
+        return movedItem;
+      })
+    );
+
+    if (movedItem) {
+      setCompletedItemsCache((prev) => {
+        if (!prev) {
+          return [movedItem as DashboardJobItem];
+        }
+
+        const withoutDuplicate = prev.filter((item) => item.id !== jobId);
+        return [movedItem as DashboardJobItem, ...withoutDuplicate];
+      });
+    }
 
     window.setTimeout(() => {
       setItems((prev) => prev.filter((item) => item.id !== jobId));
+      setCompletedItemsCache((prev) => (prev ? prev.map((item) => (item.id === jobId ? { ...item, isRemoving: false } : item)) : prev));
     }, 250);
   };
 
@@ -287,7 +363,9 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
     }, 800);
   };
 
-  if (items.length === 0) {
+  const hasAnyItems = activeItems.length > 0 || completedItems.length > 0 || isCompletedLoading;
+
+  if (!hasAnyItems) {
     return (
       <div className="rounded-3xl border border-dashed border-[color:var(--border)] bg-white/90 p-10 text-center shadow-[var(--soft-shadow)]">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-purple-100 via-fuchsia-100 to-orange-100 text-purple-700">
@@ -308,9 +386,11 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
     );
   }
 
+  const tableItems = currentTab === "active" ? activeItems : completedItems;
+
   return (
     <>
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid gap-3 sm:grid-cols-4">
         <KpiCard
           label="ทั้งหมด"
           value={totalCount}
@@ -341,6 +421,41 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
             </svg>
           }
         />
+        <KpiCard
+          label="เสร็จแล้ว"
+          value={completedItems.length}
+          accent="bg-gradient-to-br from-sky-500 to-blue-500"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+              <path d="M9.5 16.2 5.8 12.5l1.4-1.4 2.3 2.3 7.3-7.3 1.4 1.4z" />
+            </svg>
+          }
+        />
+      </div>
+
+      <div className="mb-4 inline-flex rounded-full border border-slate-200 bg-slate-100/60 p-1 transition duration-200">
+        <button
+          type="button"
+          onClick={() => handleTabChange("active")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition duration-200 ${
+            currentTab === "active"
+              ? "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          กำลังดำเนินการ ({activeItems.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange("completed")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition duration-200 ${
+            currentTab === "completed"
+              ? "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white shadow-sm"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          งานที่เสร็จแล้ว ({completedItems.length})
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
@@ -351,58 +466,105 @@ export default function DashboardJobList({ jobs, table, hasUserIdColumn, current
           <p className="col-span-2 text-right">การทำงาน</p>
         </div>
 
-        <div className="divide-y divide-slate-100">
-          {items.map((job) => {
-            const status = normalizeStatus(job.status);
-            const id = String(job.id ?? "");
-
-            return (
-              <div
-                key={id}
-                className={`group relative grid gap-4 px-5 py-4 transition-all duration-250 ease-out hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6 ${
-                  job.isRemoving ? "pointer-events-none translate-y-0.5 opacity-0" : ""
-                }`}
-              >
-                <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
-                <div className="sm:col-span-5">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
-                  <p className="font-semibold text-slate-900">{getJobTitle(job)}</p>
-                  <p className="text-xs text-slate-500">Job #{id.slice(0, 8)}</p>
-                </div>
-                <div className="sm:col-span-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สร้างเมื่อ</p>
-                  <p className="text-sm text-slate-700">{formatDate(job.created_at)}</p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สถานะ</p>
-                  <button
-                    type="button"
-                    onClick={() => handleStatusClick(job, status)}
-                    className={`focus-ring rounded-full border px-3 py-1 text-sm font-medium transition ${statusClassName[status]}`}
-                  >
-                    {getStatusLabel(status)}
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center justify-start gap-2 sm:col-span-2 sm:justify-end">
-                  <p className="w-full text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">การทำงาน</p>
-                  <Link
-                    href={`/?job=${encodeURIComponent(id)}`}
-                    className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
-                  >
-                    แก้ไขงานนี้ →
-                  </Link>
-                  <Link
-                    href={`/?job=${encodeURIComponent(id)}`}
-                    className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-                  >
-                    ดูรายละเอียด
-                  </Link>
-                </div>
+        {isCompletedLoading && currentTab === "completed" ? (
+          <div className="divide-y divide-slate-100">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="grid animate-pulse gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
+                <div className="h-4 rounded bg-slate-100 sm:col-span-5" />
+                <div className="h-4 rounded bg-slate-100 sm:col-span-3" />
+                <div className="h-4 rounded bg-slate-100 sm:col-span-2" />
+                <div className="h-4 rounded bg-slate-100 sm:col-span-2" />
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {tableItems.map((job) => {
+              const status = normalizeStatus(job.status);
+              const id = String(job.id ?? "");
+              const isCompletedTab = currentTab === "completed";
+
+              return (
+                <div
+                  key={id}
+                  className={`group relative grid gap-4 px-5 py-4 transition-all duration-250 ease-out hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6 ${
+                    job.isRemoving ? "pointer-events-none translate-y-0.5 opacity-0" : ""
+                  }`}
+                >
+                  <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
+                  <div className="sm:col-span-5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
+                    <p className="font-semibold text-slate-900">{getJobTitle(job)}</p>
+                    <p className="text-xs text-slate-500">Job #{id.slice(0, 8)}</p>
+                  </div>
+                  <div className="sm:col-span-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สร้างเมื่อ</p>
+                    <p className="text-sm text-slate-700">{formatDate(job.created_at)}</p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สถานะ</p>
+                    {isCompletedTab ? (
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-sm font-medium ${statusClassName[status]}`}>
+                        {getStatusLabel(status)}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStatusClick(job, status)}
+                        className={`focus-ring rounded-full border px-3 py-1 text-sm font-medium transition ${statusClassName[status]}`}
+                      >
+                        {getStatusLabel(status)}
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-start gap-2 sm:col-span-2 sm:justify-end">
+                    <p className="w-full text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">การทำงาน</p>
+                    {isCompletedTab ? (
+                      <>
+                        <Link
+                          href={`/?job=${encodeURIComponent(id)}`}
+                          className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
+                        >
+                          ดูรายละเอียด
+                        </Link>
+                        <Link
+                          href={`/?job=${encodeURIComponent(id)}`}
+                          className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                        >
+                          แก้ไข (สร้างเวอร์ชันใหม่)
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/?job=${encodeURIComponent(id)}`}
+                          className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
+                        >
+                          แก้ไขงานนี้ →
+                        </Link>
+                        <Link
+                          href={`/?job=${encodeURIComponent(id)}`}
+                          className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                        >
+                          ดูรายละเอียด
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {!isCompletedLoading && tableItems.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-slate-500">
+                {currentTab === "active" ? "ไม่มีงานที่กำลังดำเนินการ" : "ยังไม่มีงานที่เสร็จแล้ว"}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
+
+      {completedError ? <div className="mt-3 text-sm text-rose-600">{completedError}</div> : null}
 
       {errorMessage ? (
         <div className="fixed right-4 top-4 z-[60] max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow">
