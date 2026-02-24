@@ -94,7 +94,7 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
     asTrimmedString(job.receipt_no) ||
     asTrimmedString(job.id) ||
     "-";
-  const title =
+  const jobTitle =
     asTrimmedString(payload.title) ||
     asTrimmedString(payload.case_title) ||
     asTrimmedString(payload.subject_detail) ||
@@ -102,7 +102,7 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
     asTrimmedString(job.case_title) ||
     "-";
   // Prefer persisted net/grand total fields from job/payload before falling back to server-side VAT calculation.
-  const amount = formatAmount(
+  const formattedNetTotal = formatAmount(
     pickFirstFiniteNumber(
       [job, payload],
       ["total_net", "net_total", "grand_total", "total", "total_amount", "subtotal_incl_vat", "amount"]
@@ -110,7 +110,7 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
   );
 
   // Prefer assignee display name from document fields (ผู้ได้รับมอบหมาย), then owner/display name, then current user email.
-  const operatorName =
+  const assigneeName =
     asTrimmedString(payload.assignee) ||
     asTrimmedString(job.assignee) ||
     asTrimmedString(payload.assignee_name) ||
@@ -129,13 +129,24 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
     asTrimmedString(user.email) ||
     "-";
 
+  const thaiFormattedTime = new Date().toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
   return [
     "✅ ดำเนินการเบิกจ่ายแล้ว",
-    `เลขที่เรื่อง: ${docNumber}`,
-    `ชื่องาน: ${title}`,
-    `วงเงิน: ${amount} บาท`,
-    `ผู้ดำเนินการ: ${operatorName}`,
-    `เวลา: ${new Date().toLocaleString("th-TH")}`
+    `ใบเสร็จเลขที่: ${docNumber}`,
+    `ชื่องาน: ${jobTitle}`,
+    `วงเงิน: ${formattedNetTotal} บาท`,
+    `ผู้ดำเนินการ: ${assigneeName}`,
+    `เวลา: ${thaiFormattedTime}`
   ].join("\n");
 };
 
