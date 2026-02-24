@@ -3,6 +3,15 @@ import { NextResponse } from "next/server";
 import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
+const isCompletedStatus = (value: unknown): boolean => {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.trim();
+  return normalized === "completed" || normalized === "ดำเนินการแล้วเสร็จ";
+};
+
 const DASHBOARD_FIELD_CANDIDATES = [
   "id",
   "title",
@@ -54,8 +63,10 @@ export async function GET() {
     return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
   }
 
+  const jobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+
   return NextResponse.json({
-    jobs: data ?? [],
+    jobs,
     table,
     hasUserIdColumn: availableColumns.has("user_id"),
     currentUserId: user.id
