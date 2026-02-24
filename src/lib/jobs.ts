@@ -18,6 +18,8 @@ const COLUMN_PROBE_CANDIDATES = [
   "file_url",
   "storage_path",
   "payload",
+  "paid_at",
+  "finished_at",
   "updated_at"
 ] as const;
 
