@@ -63,10 +63,15 @@ export async function GET() {
     return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
   }
 
-  const jobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+  const allJobs = (data ?? []) as unknown as Record<string, unknown>[];
+  const completedCount = allJobs.filter((job) => isCompletedStatus(job.status)).length;
+  const jobs = allJobs.filter((job) => !isCompletedStatus(job.status));
 
   return NextResponse.json({
     jobs,
+    summary: {
+      completedCount
+    },
     table,
     hasUserIdColumn: availableColumns.has("user_id"),
     currentUserId: user.id

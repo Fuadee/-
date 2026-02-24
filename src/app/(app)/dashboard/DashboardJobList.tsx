@@ -8,6 +8,7 @@ import StatusActionDialog, { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
   jobs: JobRecord[];
+  initialCompletedCount: number;
   table: string;
   hasUserIdColumn: boolean;
   currentUserId: string | null;
@@ -175,9 +176,10 @@ const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
   isRemoving: false
 });
 
-export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
+export default function DashboardJobList({ jobs, initialCompletedCount, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
   const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
+  const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
   const [completedError, setCompletedError] = useState<string | null>(null);
@@ -251,9 +253,10 @@ export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId 
     );
 
     if (movedItem) {
+      setCompletedCount((prev) => prev + 1);
       setCompletedItemsCache((prev) => {
-        if (!prev) {
-          return [movedItem as DashboardJobItem];
+        if (!prev || currentTab !== "completed") {
+          return prev;
         }
 
         const withoutDuplicate = prev.filter((item) => item.id !== jobId);
@@ -363,7 +366,7 @@ export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId 
     }, 800);
   };
 
-  const hasAnyItems = activeItems.length > 0 || completedItems.length > 0 || isCompletedLoading;
+  const hasAnyItems = activeItems.length > 0 || completedCount > 0 || isCompletedLoading;
 
   if (!hasAnyItems) {
     return (
@@ -423,7 +426,7 @@ export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId 
         />
         <KpiCard
           label="เสร็จแล้ว"
-          value={completedItems.length}
+          value={completedCount}
           accent="bg-gradient-to-br from-sky-500 to-blue-500"
           icon={
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
@@ -454,7 +457,7 @@ export default function DashboardJobList({ jobs, hasUserIdColumn, currentUserId 
               : "text-slate-600 hover:text-slate-900"
           }`}
         >
-          งานที่เสร็จแล้ว ({completedItems.length})
+          งานที่เสร็จแล้ว ({completedCount})
         </button>
       </div>
 
