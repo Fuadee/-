@@ -5,7 +5,7 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     // log ไว้ดูใน Vercel Logs
-    console.log("LINE webhook body:", JSON.stringify(body));
+    console.log("LINE webhook body:", body);
 
     // ดึง groupId จาก event แรกที่เป็น group
     const events = body?.events ?? [];
