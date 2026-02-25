@@ -1,9 +1,20 @@
 const LINE_PUSH_API_URL = "https://api.line.me/v2/bot/message/push";
 
-const ALERT_EMOJI_ESCAPE = "\\uD83D\\uDEA8";
-const ALERT_EMOJI = "🚨";
+const UNICODE_ESCAPE_PATTERN = /\\u([0-9a-fA-F]{4})/g;
 
-const normalizeLineMessage = (message: string): string => message.replaceAll(ALERT_EMOJI_ESCAPE, ALERT_EMOJI);
+const decodeLiteralUnicodeEscapes = (text: string): string => {
+  if (!text.includes("\\u")) {
+    return text;
+  }
+
+  try {
+    return text.replace(UNICODE_ESCAPE_PATTERN, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)));
+  } catch {
+    return text;
+  }
+};
+
+const normalizeLineMessage = (message: string): string => decodeLiteralUnicodeEscapes(message);
 
 export async function sendLineGroupNotification(message: string): Promise<void> {
   const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -14,6 +25,8 @@ export async function sendLineGroupNotification(message: string): Promise<void> 
   }
 
   const normalizedMessage = normalizeLineMessage(message);
+  console.log("LINE_TEXT_RAW:", message);
+  console.log("LINE_TEXT_NORM:", normalizedMessage);
 
   const response = await fetch(LINE_PUSH_API_URL, {
     method: "POST",
