@@ -20,10 +20,21 @@ const COLUMN_PROBE_CANDIDATES = [
   "payload",
   "paid_at",
   "finished_at",
+  "revision_note",
+  "revision_requested_at",
+  "revision_requested_by",
+  "assignee_id",
+  "assignee_name",
   "updated_at"
 ] as const;
 
-export type JobRecord = Record<string, unknown>;
+export type JobRecord = Record<string, unknown> & {
+  revision_note?: string | null;
+  revision_requested_at?: string | null;
+  revision_requested_by?: string | null;
+  assignee_id?: string | null;
+  assignee_name?: string | null;
+};
 
 export async function resolveJobsTable(supabase: SupabaseClient): Promise<string | null> {
   for (const table of JOB_TABLE_CANDIDATES) {
