@@ -198,7 +198,7 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
   const [needsFixDialog, setNeedsFixDialog] = useState<NeedsFixDialogState>(null);
   const [revisionNote, setRevisionNote] = useState("");
   const [revisionError, setRevisionError] = useState<string | null>(null);
-  const [isNeedsFixSubmitting, setIsNeedsFixSubmitting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const completedItems = useMemo(() => {
@@ -343,12 +343,13 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
 
     setNeedsFixDialog({ id: dialog.id, title: dialog.title });
     setRevisionNote("");
-    setRevisionError("กรุณาระบุรายการที่ต้องแก้ไข");
+    setRevisionError(null);
+    setIsSubmitting(false);
     setErrorMessage(null);
   };
 
   const handleSubmitNeedsFix = async () => {
-    if (!needsFixDialog || isNeedsFixSubmitting) {
+    if (!needsFixDialog || isSubmitting) {
       return;
     }
 
@@ -359,33 +360,36 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
 
     const trimmedNote = revisionNote.trim();
     if (!trimmedNote) {
-      setRevisionError("กรุณาระบุรายการที่ต้องแก้ไข");
+      setRevisionError("กรุณาระบุรายการที่ต้องแก้ไขก่อนส่งกลับ");
       return;
     }
 
-    setIsNeedsFixSubmitting(true);
+    setIsSubmitting(true);
     setRevisionError(null);
 
-    const response = await fetch(`/api/jobs/${encodeURIComponent(needsFixDialog.id)}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ status: "needs_fix", revisionNote: trimmedNote })
-    });
+    try {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(needsFixDialog.id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ status: "needs_fix", revisionNote: trimmedNote })
+      });
 
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-      setRevisionError(payload?.message ?? "ส่งกลับแก้ไขไม่สำเร็จ");
-      setIsNeedsFixSubmitting(false);
-      return;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+        setRevisionError(payload?.message ?? "ส่งกลับแก้ไขไม่สำเร็จ");
+        return;
+      }
+
+      setItems((prev) => prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "needs_fix", revision_note: trimmedNote } : item)));
+      setNeedsFixDialog(null);
+      setDialog(null);
+      setRevisionNote("");
+      setRevisionError(null);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setItems((prev) => prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "needs_fix", revision_note: trimmedNote } : item)));
-    setNeedsFixDialog(null);
-    setDialog(null);
-    setRevisionNote("");
-    setIsNeedsFixSubmitting(false);
   };
 
   const handleMarkPaymentDone = async () => {
@@ -636,6 +640,12 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
         </div>
       ) : null}
 
+      {needsFixDialog && revisionError ? (
+        <div className="fixed right-4 top-4 z-[70] max-w-sm rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow">
+          {revisionError}
+        </div>
+      ) : null}
+
       <StatusActionDialog
         open={Boolean(dialog)}
         jobTitle={dialog?.title ?? ""}
@@ -678,30 +688,32 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
                 id="revision-note"
                 value={revisionNote}
                 onChange={(event) => {
-                  const nextValue = event.target.value;
-                  setRevisionNote(nextValue);
-                  setRevisionError(nextValue.trim() ? null : "กรุณาระบุรายการที่ต้องแก้ไข");
+                  setRevisionNote(event.target.value);
+                  if (revisionError) {
+                    setRevisionError(null);
+                  }
                 }}
-                placeholder="ระบุประเด็นที่ต้องแก้ไขให้ชัดเจน"
+                placeholder="ระบุรายการที่ต้องแก้ไข เช่น …"
                 rows={5}
                 className="w-full rounded-2xl border border-purple-200 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-inner outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-200"
               />
-              {revisionError ? <p className="mt-2 text-sm text-rose-500">{revisionError}</p> : null}
+              {revisionError ? <p className="mt-2 text-sm text-rose-400">{revisionError}</p> : null}
             </div>
 
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  if (isNeedsFixSubmitting) {
+                  if (isSubmitting) {
                     return;
                   }
 
                   setNeedsFixDialog(null);
                   setRevisionNote("");
                   setRevisionError(null);
+                  setIsSubmitting(false);
                 }}
-                disabled={isNeedsFixSubmitting}
+                disabled={isSubmitting}
                 className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 ยกเลิก
@@ -709,10 +721,10 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
               <button
                 type="button"
                 onClick={handleSubmitNeedsFix}
-                disabled={isNeedsFixSubmitting || !revisionNote.trim()}
+                disabled={isSubmitting || revisionNote.trim() === ""}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(147,51,234,0.35)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isNeedsFixSubmitting ? (
+                {isSubmitting ? (
                   <>
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden="true" />
                     กำลังส่งกลับ...
