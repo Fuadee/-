@@ -32,6 +32,11 @@ type DialogState = {
   grandTotal: number | null;
 } | null;
 
+type NeedsFixDialogState = {
+  id: string;
+  title: string;
+} | null;
+
 type JobPayload = {
   subject_detail?: unknown;
   vendor_name?: unknown;
@@ -190,6 +195,10 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
+  const [needsFixDialog, setNeedsFixDialog] = useState<NeedsFixDialogState>(null);
+  const [revisionNote, setRevisionNote] = useState("");
+  const [revisionError, setRevisionError] = useState<string | null>(null);
+  const [isNeedsFixSubmitting, setIsNeedsFixSubmitting] = useState(false);
 
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const completedItems = useMemo(() => {
@@ -325,6 +334,58 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
 
     setDialog(null);
     setIsSaving(false);
+  };
+
+  const handleRequestNeedsFix = () => {
+    if (!dialog || dialog.status !== "pending_review" || isSaving) {
+      return;
+    }
+
+    setNeedsFixDialog({ id: dialog.id, title: dialog.title });
+    setRevisionNote("");
+    setRevisionError("กรุณาระบุรายการที่ต้องแก้ไข");
+    setErrorMessage(null);
+  };
+
+  const handleSubmitNeedsFix = async () => {
+    if (!needsFixDialog || isNeedsFixSubmitting) {
+      return;
+    }
+
+    if (hasUserIdColumn && !currentUserId) {
+      setRevisionError("ไม่พบผู้ใช้งานปัจจุบัน จึงไม่สามารถส่งกลับแก้ไขได้");
+      return;
+    }
+
+    const trimmedNote = revisionNote.trim();
+    if (!trimmedNote) {
+      setRevisionError("กรุณาระบุรายการที่ต้องแก้ไข");
+      return;
+    }
+
+    setIsNeedsFixSubmitting(true);
+    setRevisionError(null);
+
+    const response = await fetch(`/api/jobs/${encodeURIComponent(needsFixDialog.id)}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status: "needs_fix", revisionNote: trimmedNote })
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      setRevisionError(payload?.message ?? "ส่งกลับแก้ไขไม่สำเร็จ");
+      setIsNeedsFixSubmitting(false);
+      return;
+    }
+
+    setItems((prev) => prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "needs_fix", revision_note: trimmedNote } : item)));
+    setNeedsFixDialog(null);
+    setDialog(null);
+    setRevisionNote("");
+    setIsNeedsFixSubmitting(false);
   };
 
   const handleMarkPaymentDone = async () => {
@@ -599,8 +660,71 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
           setPaymentSuccessMessage(null);
         }}
         onUpdateStatus={handleUpdateStatus}
+        onRequestNeedsFix={handleRequestNeedsFix}
         onMarkPaymentDone={handleMarkPaymentDone}
       />
+
+      {needsFixDialog ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-white/30 bg-gradient-to-br from-white via-purple-50 to-orange-50 p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-slate-900">ส่งกลับแก้ไข</h2>
+            <p className="mt-1 text-sm text-slate-600">{needsFixDialog.title}</p>
+
+            <div className="mt-4">
+              <label htmlFor="revision-note" className="mb-2 block text-sm font-medium text-slate-800">
+                ต้องแก้ไขอะไร
+              </label>
+              <textarea
+                id="revision-note"
+                value={revisionNote}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setRevisionNote(nextValue);
+                  setRevisionError(nextValue.trim() ? null : "กรุณาระบุรายการที่ต้องแก้ไข");
+                }}
+                placeholder="ระบุประเด็นที่ต้องแก้ไขให้ชัดเจน"
+                rows={5}
+                className="w-full rounded-2xl border border-purple-200 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-inner outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-200"
+              />
+              {revisionError ? <p className="mt-2 text-sm text-rose-500">{revisionError}</p> : null}
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isNeedsFixSubmitting) {
+                    return;
+                  }
+
+                  setNeedsFixDialog(null);
+                  setRevisionNote("");
+                  setRevisionError(null);
+                }}
+                disabled={isNeedsFixSubmitting}
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitNeedsFix}
+                disabled={isNeedsFixSubmitting || !revisionNote.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(147,51,234,0.35)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isNeedsFixSubmitting ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-white" aria-hidden="true" />
+                    กำลังส่งกลับ...
+                  </>
+                ) : (
+                  "ส่งกลับแก้ไข"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

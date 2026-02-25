@@ -9,6 +9,7 @@ type UpdateStatusPayload = {
   status?: string;
   nextStatus?: string;
   action?: string;
+  revisionNote?: string;
 };
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -85,6 +86,117 @@ const formatAmount = (value: number | null): string =>
 
 const PAYMENT_DONE_STATUS = "ดำเนินการแล้วเสร็จ";
 
+const NEEDS_FIX_STATUS = "needs_fix";
+
+const formatThaiDateTime = (date: Date): string => {
+  const datePart = new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+
+  return `${datePart} ${timePart}`;
+};
+
+const getOriginFromRequest = (request: NextRequest): string => {
+  const envBaseUrl = asTrimmedString(process.env.NEXT_PUBLIC_APP_URL) || asTrimmedString(process.env.APP_URL) || asTrimmedString(process.env.BASE_URL);
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, "");
+  }
+
+  const origin = request.nextUrl.origin || `${request.headers.get("x-forwarded-proto") ?? "https"}://${request.headers.get("host") ?? ""}`;
+  return origin.replace(/\/$/, "");
+};
+
+const getAssigneeDisplayNameFromJob = (job: JobRecord): string => {
+  const payload = parseJobPayload(job.payload);
+
+  return (
+    asTrimmedString(payload.assignee) ||
+    asTrimmedString(job.assignee) ||
+    asTrimmedString(payload.assignee_name) ||
+    asTrimmedString(job.assignee_name) ||
+    asTrimmedString(payload.assigned_to_name) ||
+    asTrimmedString(job.assigned_to_name) ||
+    asTrimmedString(payload.receiver_name) ||
+    asTrimmedString(job.receiver_name) ||
+    asTrimmedString(payload.recipient_name) ||
+    asTrimmedString(job.recipient_name) ||
+    asTrimmedString(payload.delegate_name) ||
+    asTrimmedString(job.delegate_name) ||
+    asTrimmedString(payload.owner_name) ||
+    asTrimmedString(job.owner_name)
+  );
+};
+
+const resolveAssigneeId = (job: JobRecord): string => {
+  const payload = parseJobPayload(job.payload);
+
+  return (
+    asTrimmedString(job.assignee_id) ||
+    asTrimmedString(payload.assignee_id) ||
+    asTrimmedString(job.assigned_to) ||
+    asTrimmedString(payload.assigned_to)
+  );
+};
+
+const tryResolveNameById = async (supabase: ReturnType<typeof createSupabaseServer>, assigneeId: string): Promise<string> => {
+  if (!assigneeId) {
+    return "";
+  }
+
+  const candidateTables = ["profiles", "users"];
+  const candidateColumns = ["display_name", "full_name", "name"];
+
+  for (const table of candidateTables) {
+    const { data, error } = await supabase.from(table).select("*").eq("id", assigneeId).limit(1);
+    if (error) {
+      continue;
+    }
+
+    const row = (data ?? [])[0] as Record<string, unknown> | undefined;
+    if (!row) {
+      continue;
+    }
+
+    for (const column of candidateColumns) {
+      const value = asTrimmedString(row[column]);
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return "";
+};
+
+const buildNeedsFixLineMessage = (job: JobRecord, assigneeName: string, revisionNote: string, jobUrl: string, requestedAt: Date): string => {
+  const payload = parseJobPayload(job.payload);
+  const jobTitle =
+    asTrimmedString(payload.title) ||
+    asTrimmedString(payload.case_title) ||
+    asTrimmedString(payload.subject_detail) ||
+    asTrimmedString(job.title) ||
+    asTrimmedString(job.case_title) ||
+    "-";
+
+  return [
+    "🚨 ส่งกลับแก้ไขเอกสาร",
+    `งาน: ${jobTitle}`,
+    `ผู้รับมอบหมาย: ${assigneeName || "(ไม่ระบุชื่อ)"}`,
+    `รายการที่ต้องแก้: ${revisionNote}`,
+    `เวลา: ${formatThaiDateTime(requestedAt)}`,
+    `ลิงก์ไปแก้ไข: ${jobUrl}`
+  ].join("\n");
+};
+
 const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; user_metadata?: Record<string, unknown> | null }): string => {
   const payload = parseJobPayload(job.payload);
   const docNumber =
@@ -110,24 +222,7 @@ const buildPaymentDoneMessage = (job: JobRecord, user: { email?: string | null; 
   );
 
   // Prefer assignee display name from document fields (ผู้ได้รับมอบหมาย), then owner/display name, then current user email.
-  const assigneeName =
-    asTrimmedString(payload.assignee) ||
-    asTrimmedString(job.assignee) ||
-    asTrimmedString(payload.assignee_name) ||
-    asTrimmedString(job.assignee_name) ||
-    asTrimmedString(payload.assigned_to_name) ||
-    asTrimmedString(job.assigned_to_name) ||
-    asTrimmedString(payload.receiver_name) ||
-    asTrimmedString(job.receiver_name) ||
-    asTrimmedString(payload.recipient_name) ||
-    asTrimmedString(job.recipient_name) ||
-    asTrimmedString(payload.delegate_name) ||
-    asTrimmedString(job.delegate_name) ||
-    asTrimmedString(payload.owner_name) ||
-    asTrimmedString(job.owner_name) ||
-    asTrimmedString(user.user_metadata?.full_name) ||
-    asTrimmedString(user.email) ||
-    "-";
+  const assigneeName = getAssigneeDisplayNameFromJob(job) || asTrimmedString(user.user_metadata?.full_name) || "(ไม่ระบุชื่อ)";
 
   const thaiFormattedTime = new Date().toLocaleString("th-TH", {
     timeZone: "Asia/Bangkok",
@@ -194,6 +289,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const body = (await request.json().catch(() => null)) as UpdateStatusPayload | null;
   const action = asTrimmedString(body?.action);
   const nextStatus = asTrimmedString(body?.nextStatus || body?.status);
+  const revisionNote = asTrimmedString(body?.revisionNote);
 
   const table = await resolveJobsTable(supabase);
   if (!table) {
@@ -250,6 +346,65 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const job = ((data ?? [])[0] ?? null) as JobRecord | null;
     if (!job) {
       return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
+    }
+
+    return NextResponse.json({ job });
+  }
+
+  if (nextStatus === NEEDS_FIX_STATUS) {
+    if (!revisionNote) {
+      return NextResponse.json({ message: "กรุณาระบุรายการที่ต้องแก้ไขก่อนส่งกลับ" }, { status: 400 });
+    }
+
+    const requiredColumns = ["revision_note", "revision_requested_at", "revision_requested_by"];
+    const missingColumns = requiredColumns.filter((column) => !availableColumns.has(column));
+    if (missingColumns.length > 0) {
+      return NextResponse.json(
+        { message: `ตารางงานเอกสารยังไม่พร้อมใช้งาน (${missingColumns.join(", ")}) กรุณาอัปเดต migration ก่อน` },
+        { status: 500 }
+      );
+    }
+
+    const nowIso = new Date().toISOString();
+    const updates: Record<string, unknown> = {
+      status: NEEDS_FIX_STATUS,
+      revision_note: revisionNote,
+      revision_requested_at: nowIso,
+      revision_requested_by: user.id
+    };
+
+    let updateQuery = supabase.from(table).update(updates).eq("id", params.id).select("*").limit(1);
+    if (availableColumns.has("user_id")) {
+      updateQuery = updateQuery.eq("user_id", user.id);
+    }
+
+    const { data, error } = await updateQuery;
+    if (error) {
+      return NextResponse.json({ message: `อัปเดตสถานะไม่สำเร็จ: ${error.message}` }, { status: 500 });
+    }
+
+    const job = ((data ?? [])[0] ?? null) as JobRecord | null;
+    if (!job) {
+      return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
+    }
+
+    const assigneeNameFromJob = getAssigneeDisplayNameFromJob(job);
+    const assigneeNameById = await tryResolveNameById(supabase, resolveAssigneeId(job));
+    const assigneeName = assigneeNameFromJob || assigneeNameById || "(ไม่ระบุชื่อ)";
+    const origin = getOriginFromRequest(request);
+    const jobUrl = `${origin}/?job=${encodeURIComponent(String(job.id ?? params.id))}`;
+    const revisionRequestedAt = new Date(nowIso);
+    const lineMessage = buildNeedsFixLineMessage(job, assigneeName, revisionNote, jobUrl, revisionRequestedAt);
+
+    try {
+      await sendLineGroupNotification(lineMessage);
+    } catch (lineError) {
+      console.error("Unable to send LINE needs-fix notification:", {
+        error: lineError,
+        jobId: params.id,
+        assigneeName,
+        revisionNote
+      });
     }
 
     return NextResponse.json({ job });

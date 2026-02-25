@@ -19,6 +19,7 @@ type StatusActionDialogProps = {
   paymentSuccessMessage: string | null;
   onClose: () => void;
   onUpdateStatus: (nextStatus: EffectiveStatus) => void;
+  onRequestNeedsFix: () => void;
   onMarkPaymentDone: () => void;
 };
 
@@ -156,6 +157,7 @@ export default function StatusActionDialog({
   paymentSuccessMessage,
   onClose,
   onUpdateStatus,
+  onRequestNeedsFix,
   onMarkPaymentDone
 }: StatusActionDialogProps) {
   if (!open) {
@@ -229,7 +231,7 @@ export default function StatusActionDialog({
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("needs_fix")}
+                onClick={onRequestNeedsFix}
                 disabled={isSaving}
                 className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
