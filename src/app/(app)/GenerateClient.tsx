@@ -1293,7 +1293,7 @@ export default function GenerateClient() {
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                       </span>
                     ) : (
-                      editingJobId ? "บันทึกและ Generate ใหม่" : "Generate DOCX"
+                      editingJobId ? "บันทึกและสร้างเอกสารใหม่" : "บันทึกและสร้างเอกสารใหม่"
                     )}
                   </button>
                   <button type="button" className={styles.resetButton} onClick={resetForm}>
