@@ -1313,7 +1313,12 @@ export default function GenerateClient() {
                   <thead>
                     <tr>
                       <th>ลำดับ</th>
-                      <th>ชื่อวัสดุ</th>
+                      <th>
+                        <span className="whitespace-nowrap">
+                          <span>ชื่อวัสดุ</span>
+                          <span className="ml-1 text-xs font-medium text-orange-500">(ไม่ระบุยี่ห้อ)</span>
+                        </span>
+                      </th>
                       <th>จำนวน</th>
                       <th>หน่วย</th>
                       <th>{unitPriceColumnLabel}</th>
