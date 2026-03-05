@@ -225,11 +225,12 @@ export default function GenerateClient() {
   const [vatMode, setVatMode] = useState<VatMode | null>(null);
   const specTextareasRef = useRef<Array<HTMLTextAreaElement | null>>([]);
   const expandedSpecTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const MAX_SPEC_HEIGHT = 72;
 
   const resizeSpecTextarea = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 96)}px`;
-  }, []);
+    textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_SPEC_HEIGHT)}px`;
+  }, [MAX_SPEC_HEIGHT]);
 
   useEffect(() => {
     if (!editingJobId) {
@@ -1298,6 +1299,16 @@ export default function GenerateClient() {
 
               <div className={styles.tableWrap}>
                 <table className={styles.table}>
+                  <colgroup>
+                    <col className={styles.colNo} />
+                    <col className={styles.colName} />
+                    <col className={styles.colQty} />
+                    <col className={styles.colUnit} />
+                    <col className={styles.colUnitPrice} />
+                    <col className={styles.colTotal} />
+                    <col className={styles.colSpec} />
+                    <col className={styles.colActions} />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>ลำดับ</th>
@@ -1353,7 +1364,6 @@ export default function GenerateClient() {
                           <div
                             className={`${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}
                           >
-                            {!item.spec.trim() ? <span className={styles.specMissingBadge}>ยังไม่กรอก</span> : null}
                             <textarea
                               id={`item-spec-${index}`}
                               ref={(element) => setSpecTextareaRef(index, element)}
@@ -1367,12 +1377,23 @@ export default function GenerateClient() {
                             <button
                               type="button"
                               className={styles.expandSpecButton}
+                              aria-label="ขยายคุณลักษณะ"
                               onClick={() => {
                                 setExpandedSpecIndex(index);
                                 setExpandedSpecDraft(item.spec);
                               }}
                             >
-                              ขยาย
+                              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                                <path
+                                  d="M2.75 7V2.75H7M2.75 2.75l5 5M17.25 13v4.25H13M17.25 17.25l-5-5"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  fill="none"
+                                />
+                              </svg>
+                              <span className={styles.srOnly}>ขยายคุณลักษณะ</span>
                             </button>
                           </div>
                         </td>
