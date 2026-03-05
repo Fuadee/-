@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Maximize2 } from "lucide-react";
 import {
   buildPaymentBudgetDocText,
   getOperatingCostCenter,
@@ -1362,12 +1363,12 @@ export default function GenerateClient() {
                         <td className={styles.totalCell}>{formatMoney(itemTotal(item))}</td>
                         <td>
                           <div
-                            className={`${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}
+                            className={`relative ${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}
                           >
                             <textarea
                               id={`item-spec-${index}`}
                               ref={(element) => setSpecTextareaRef(index, element)}
-                              className={styles.specInlineTextarea}
+                              className={`${styles.specInlineTextarea} pb-5`}
                               rows={1}
                               placeholder="เช่น ขนาด/รุ่น/มาตรฐาน/สี/ความยาว…"
                               value={item.spec}
@@ -1376,24 +1377,16 @@ export default function GenerateClient() {
                             />
                             <button
                               type="button"
-                              className={styles.expandSpecButton}
+                              className="absolute bottom-1 right-2 flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 cursor-pointer"
+                              title="เปิดตัวแก้ไขแบบเต็ม"
                               aria-label="ขยายคุณลักษณะ"
                               onClick={() => {
                                 setExpandedSpecIndex(index);
                                 setExpandedSpecDraft(item.spec);
                               }}
                             >
-                              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                                <path
-                                  d="M2.75 7V2.75H7M2.75 2.75l5 5M17.25 13v4.25H13M17.25 17.25l-5-5"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  fill="none"
-                                />
-                              </svg>
-                              <span className={styles.srOnly}>ขยายคุณลักษณะ</span>
+                              <Maximize2 size={14} />
+                              ขยาย
                             </button>
                           </div>
                         </td>
