@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   buildPaymentBudgetDocText,
@@ -29,6 +29,11 @@ type ItemForm = {
   unit: string;
   price: string;
   spec: string;
+};
+
+type MissingSpecRow = {
+  index: number;
+  label: string;
 };
 
 type ApiErrorResponse = {
@@ -213,7 +218,18 @@ export default function GenerateClient() {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [showMissingSpecModal, setShowMissingSpecModal] = useState(false);
+  const [missingSpecRows, setMissingSpecRows] = useState<MissingSpecRow[]>([]);
+  const [expandedSpecIndex, setExpandedSpecIndex] = useState<number | null>(null);
+  const [expandedSpecDraft, setExpandedSpecDraft] = useState("");
   const [vatMode, setVatMode] = useState<VatMode | null>(null);
+  const specTextareasRef = useRef<Array<HTMLTextAreaElement | null>>([]);
+  const expandedSpecTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const resizeSpecTextarea = useCallback((textarea: HTMLTextAreaElement) => {
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 96)}px`;
+  }, []);
 
   useEffect(() => {
     if (!editingJobId) {
@@ -330,6 +346,26 @@ export default function GenerateClient() {
     void loadJob();
   }, [editingJobId]);
 
+  useEffect(() => {
+    specTextareasRef.current.forEach((textarea) => {
+      if (textarea) {
+        resizeSpecTextarea(textarea);
+      }
+    });
+  }, [items, resizeSpecTextarea]);
+
+  useEffect(() => {
+    if (expandedSpecIndex === null) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      expandedSpecTextareaRef.current?.focus();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [expandedSpecIndex]);
+
   const updateItem = (index: number, field: keyof ItemForm, value: string) => {
     setItems((prevItems) =>
       prevItems.map((item, itemIndex) =>
@@ -337,6 +373,16 @@ export default function GenerateClient() {
       )
     );
   };
+
+  const setSpecTextareaRef = useCallback(
+    (index: number, element: HTMLTextAreaElement | null) => {
+      specTextareasRef.current[index] = element;
+      if (element) {
+        resizeSpecTextarea(element);
+      }
+    },
+    [resizeSpecTextarea]
+  );
 
   const addItem = () => {
     setItems((prevItems) => [...prevItems, createEmptyItem()]);
@@ -350,6 +396,29 @@ export default function GenerateClient() {
       return prevItems.filter((_, itemIndex) => itemIndex !== index);
     });
   };
+
+  const isItemUsed = useCallback(
+    (item: ItemForm) =>
+      item.name.trim().length > 0 || parseNumber(item.qty) > 0 || parseNumber(item.price) > 0 || item.unit.trim().length > 0,
+    []
+  );
+
+  const getMissingSpecRows = useCallback(
+    (list: ItemForm[]): MissingSpecRow[] =>
+      list
+        .map((item, index) => {
+          if (!isItemUsed(item) || item.spec.trim().length > 0) {
+            return null;
+          }
+
+          return {
+            index,
+            label: `แถว ${index + 1}${item.name.trim() ? `: ${item.name.trim()}` : ""}`
+          };
+        })
+        .filter((value): value is MissingSpecRow => Boolean(value)),
+    [isItemUsed]
+  );
 
   const resetForm = () => {
     const isConfirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?");
@@ -378,6 +447,8 @@ export default function GenerateClient() {
     setVatMode(null);
     setError(null);
     setValidationErrors({});
+    setShowMissingSpecModal(false);
+    setMissingSpecRows([]);
   };
 
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
@@ -604,6 +675,7 @@ export default function GenerateClient() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const errors = validateForm();
+    const missingSpecs = getMissingSpecRows(items);
     setValidationErrors(errors);
 
     if (hasValidationError(errors)) {
@@ -612,8 +684,17 @@ export default function GenerateClient() {
       return;
     }
 
+    if (missingSpecs.length > 0) {
+      setShowIncompleteModal(false);
+      setMissingSpecRows(missingSpecs);
+      setShowMissingSpecModal(true);
+      return;
+    }
+
     setShowIncompleteModal(false);
     setMissingFields([]);
+    setShowMissingSpecModal(false);
+    setMissingSpecRows([]);
 
     setLoading(true);
     setError(null);
@@ -709,6 +790,43 @@ export default function GenerateClient() {
         open={showIncompleteModal}
         missingFields={missingFields}
         onClose={() => setShowIncompleteModal(false)}
+      />
+      <SpecModal
+        open={expandedSpecIndex !== null}
+        value={expandedSpecDraft}
+        onChange={setExpandedSpecDraft}
+        onClose={() => setExpandedSpecIndex(null)}
+        onSave={() => {
+          if (expandedSpecIndex === null) {
+            return;
+          }
+
+          updateItem(expandedSpecIndex, "spec", expandedSpecDraft);
+          setExpandedSpecIndex(null);
+          window.requestAnimationFrame(() => {
+            const target = specTextareasRef.current[expandedSpecIndex];
+            if (target) {
+              resizeSpecTextarea(target);
+              target.focus();
+            }
+          });
+        }}
+        textareaRef={expandedSpecTextareaRef}
+      />
+      <MissingSpecModal
+        open={showMissingSpecModal}
+        rows={missingSpecRows}
+        onClose={() => setShowMissingSpecModal(false)}
+        onJump={(index) => {
+          setShowMissingSpecModal(false);
+          window.requestAnimationFrame(() => {
+            const target = specTextareasRef.current[index];
+            if (target) {
+              resizeSpecTextarea(target);
+              target.focus();
+            }
+          });
+        }}
       />
       <main className={styles.page}>
       <div className={styles.container}>
@@ -1232,15 +1350,31 @@ export default function GenerateClient() {
                         </td>
                         <td className={styles.totalCell}>{formatMoney(itemTotal(item))}</td>
                         <td>
-                          <details>
-                            <summary className={styles.summaryToggle}>เปิด/ซ่อน</summary>
+                          <div
+                            className={`${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}
+                          >
+                            {!item.spec.trim() ? <span className={styles.specMissingBadge}>ยังไม่กรอก</span> : null}
                             <textarea
                               id={`item-spec-${index}`}
-                              rows={3}
+                              ref={(element) => setSpecTextareaRef(index, element)}
+                              className={styles.specInlineTextarea}
+                              rows={1}
+                              placeholder="เช่น ขนาด/รุ่น/มาตรฐาน/สี/ความยาว…"
                               value={item.spec}
+                              onInput={(event) => resizeSpecTextarea(event.currentTarget)}
                               onChange={(event) => updateItem(index, "spec", event.target.value)}
                             />
-                          </details>
+                            <button
+                              type="button"
+                              className={styles.expandSpecButton}
+                              onClick={() => {
+                                setExpandedSpecIndex(index);
+                                setExpandedSpecDraft(item.spec);
+                              }}
+                            >
+                              ขยาย
+                            </button>
+                          </div>
                         </td>
                         <td>
                           <button
@@ -1309,5 +1443,111 @@ export default function GenerateClient() {
       </div>
     </main>
     </>
+  );
+}
+
+type SpecModalProps = {
+  open: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+  textareaRef: RefObject<HTMLTextAreaElement>;
+};
+
+function SpecModal({ open, value, onChange, onClose, onSave, textareaRef }: SpecModalProps) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose} role="presentation">
+      <div className={styles.modalCard} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+        <h3 className={styles.modalTitle}>แก้ไขคุณลักษณะ (spec)</h3>
+        <textarea
+          ref={textareaRef}
+          rows={9}
+          className={styles.modalTextarea}
+          placeholder="เช่น ขนาด/รุ่น/มาตรฐาน/สี/ความยาว…"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <div className={styles.modalActions}>
+          <button type="button" className={styles.secondaryButton} onClick={onClose}>
+            ยกเลิก
+          </button>
+          <button type="button" className={styles.primaryButtonInline} onClick={onSave}>
+            บันทึก
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type MissingSpecModalProps = {
+  open: boolean;
+  rows: MissingSpecRow[];
+  onClose: () => void;
+  onJump: (index: number) => void;
+};
+
+function MissingSpecModal({ open, rows, onClose, onJump }: MissingSpecModalProps) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose} role="presentation">
+      <div className={styles.modalCard} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+        <h3 className={styles.modalTitle}>กรอกคุณลักษณะให้ครบ</h3>
+        <p className={styles.modalDescription}>พบรายการที่กรอกข้อมูลแล้ว แต่ยังไม่ได้ระบุคุณลักษณะ (spec)</p>
+        <ul className={styles.missingSpecList}>
+          {rows.map((row) => (
+            <li key={`missing-spec-row-${row.index}`}>
+              <span>{row.label}</span>
+              <button type="button" className={styles.expandSpecButton} onClick={() => onJump(row.index)}>
+                ไปกรอกแถวนี้
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className={styles.modalActions}>
+          <button type="button" className={styles.secondaryButton} onClick={onClose}>
+            ปิด
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
