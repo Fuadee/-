@@ -481,6 +481,21 @@ export default function GenerateClient() {
   const vatModeMissingError = "กรุณาเลือกโหมด VAT ก่อน (รวม VAT / ไม่รวม VAT / ไม่มี VAT)";
   const shouldShowVatModeError = Boolean(validationErrors.vatMode) || !vatMode;
 
+  const renderVatLabel = (label: string) => {
+    const match = label.match(/^(.*)\s(\((?:ก่อน VAT|รวม VAT|ไม่รวม VAT)\))$/);
+    if (!match) {
+      return label;
+    }
+
+    const [, mainLabel, vatLabel] = match;
+    return (
+      <span>
+        {mainLabel}
+        <span className="ml-1 inline-flex items-center whitespace-nowrap text-xs text-orange-500">{vatLabel}</span>
+      </span>
+    );
+  };
+
   const itemErrors = useMemo(
     () =>
       items.map((item) => {
@@ -1321,7 +1336,7 @@ export default function GenerateClient() {
                       </th>
                       <th>จำนวน</th>
                       <th>หน่วย</th>
-                      <th>{unitPriceColumnLabel}</th>
+                      <th>{renderVatLabel(unitPriceColumnLabel)}</th>
                       <th>ราคารวม</th>
                       <th>คุณลักษณะ (spec)</th>
                       <th>Actions</th>
@@ -1426,7 +1441,14 @@ export default function GenerateClient() {
                 <div className={styles.summaryBottom}>
                   <dl className={styles.summaryList}>
                     <div className={styles.summaryRow}>
-                      <dt className={styles.summaryLabel}>ราคาสินค้า (ก่อน VAT)</dt>
+                      <dt className={styles.summaryLabel}>
+                        <span>
+                          ราคาสินค้า
+                          <span className="ml-1 inline-flex items-center whitespace-nowrap text-xs text-orange-500">
+                            (ก่อน VAT)
+                          </span>
+                        </span>
+                      </dt>
                       <dd className={styles.summaryValue}>{formatMoney(subtotalNet)}</dd>
                     </div>
                     <div className={styles.summaryRow}>
