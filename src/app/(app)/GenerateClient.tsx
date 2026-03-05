@@ -1362,32 +1362,34 @@ export default function GenerateClient() {
                         </td>
                         <td className={styles.totalCell}>{formatMoney(itemTotal(item))}</td>
                         <td>
-                          <div
-                            className={`relative ${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}
-                          >
-                            <textarea
-                              id={`item-spec-${index}`}
-                              ref={(element) => setSpecTextareaRef(index, element)}
-                              className={`${styles.specInlineTextarea} pb-5`}
-                              rows={1}
-                              placeholder="เช่น ขนาด/รุ่น/มาตรฐาน/สี/ความยาว…"
-                              value={item.spec}
-                              onInput={(event) => resizeSpecTextarea(event.currentTarget)}
-                              onChange={(event) => updateItem(index, "spec", event.target.value)}
-                            />
-                            <button
-                              type="button"
-                              className="absolute bottom-1 right-2 flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 cursor-pointer"
-                              title="เปิดตัวแก้ไขแบบเต็ม"
-                              aria-label="ขยายคุณลักษณะ"
-                              onClick={() => {
-                                setExpandedSpecIndex(index);
-                                setExpandedSpecDraft(item.spec);
-                              }}
-                            >
-                              <Maximize2 size={14} />
-                              ขยาย
-                            </button>
+                          <div className={`${styles.specEditorWrap} ${item.spec.trim() ? "" : styles.specEditorMissing}`}>
+                            <div className="flex flex-col">
+                              <textarea
+                                id={`item-spec-${index}`}
+                                ref={(element) => setSpecTextareaRef(index, element)}
+                                className={`${styles.specInlineTextarea} min-h-[36px] max-h-[72px] px-2.5 py-1.5 resize-none`}
+                                rows={1}
+                                placeholder="เช่น ขนาด/รุ่น/มาตรฐาน/สี/ความยาว…"
+                                value={item.spec}
+                                onInput={(event) => resizeSpecTextarea(event.currentTarget)}
+                                onChange={(event) => updateItem(index, "spec", event.target.value)}
+                              />
+                              <div className="mt-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                  title="เปิดตัวแก้ไขแบบเต็ม"
+                                  aria-label="ขยายคุณลักษณะ"
+                                  onClick={() => {
+                                    setExpandedSpecIndex(index);
+                                    setExpandedSpecDraft(item.spec);
+                                  }}
+                                >
+                                  <Maximize2 size={14} className="opacity-90" />
+                                  ขยาย
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td>
