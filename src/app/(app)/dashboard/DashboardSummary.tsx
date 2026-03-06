@@ -6,38 +6,91 @@ import type { JobRecord } from "@/lib/jobs";
 import DashboardJobList from "./DashboardJobList";
 
 type DashboardSummaryResponse = {
-  jobs: JobRecord[];
   summary: {
+    activeCount: number;
+    pendingReviewCount: number;
+    needsFixCount: number;
     completedCount: number;
   };
-  table: string;
   hasUserIdColumn: boolean;
   currentUserId: string | null;
 };
 
+type DashboardJobsResponse = {
+  jobs: JobRecord[];
+};
+
+let summaryRequest: Promise<DashboardSummaryResponse> | null = null;
+let summaryCache: DashboardSummaryResponse | null = null;
+
+let jobsRequest: Promise<DashboardJobsResponse> | null = null;
+let jobsCache: DashboardJobsResponse | null = null;
+
+const fetchJson = async <T extends object>(url: string): Promise<T> => {
+  const response = await fetch(url, { method: "GET", cache: "no-store" });
+  const payload = (await response.json()) as T | { message?: string };
+
+  if (!response.ok) {
+    const message = "message" in payload && payload.message ? payload.message : "โหลดข้อมูล dashboard ไม่สำเร็จ";
+    throw new Error(message);
+  }
+
+  return payload as T;
+};
+
+const fetchSummaryDeduped = async () => {
+  if (summaryCache) {
+    return summaryCache;
+  }
+
+  if (!summaryRequest) {
+    summaryRequest = fetchJson<DashboardSummaryResponse>("/api/dashboard/summary")
+      .then((payload) => {
+        summaryCache = payload;
+        return payload;
+      })
+      .finally(() => {
+        summaryRequest = null;
+      });
+  }
+
+  return summaryRequest;
+};
+
+const fetchJobsDeduped = async () => {
+  if (jobsCache) {
+    return jobsCache;
+  }
+
+  if (!jobsRequest) {
+    jobsRequest = fetchJson<DashboardJobsResponse>("/api/dashboard/jobs")
+      .then((payload) => {
+        jobsCache = payload;
+        return payload;
+      })
+      .finally(() => {
+        jobsRequest = null;
+      });
+  }
+
+  return jobsRequest;
+};
+
 export default function DashboardSummary() {
-  const [data, setData] = useState<DashboardSummaryResponse | null>(null);
+  const [summaryData, setSummaryData] = useState<DashboardSummaryResponse | null>(summaryCache);
+  const [jobsData, setJobsData] = useState<DashboardJobsResponse | null>(jobsCache);
+  const [isJobsLoading, setIsJobsLoading] = useState(!jobsCache);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
 
-    async function load() {
+    async function loadSummary() {
       try {
-        const response = await fetch("/api/dashboard/summary", {
-          method: "GET",
-          cache: "no-store"
-        });
-
-        const payload = (await response.json()) as DashboardSummaryResponse | { message?: string };
-
-        if (!response.ok) {
-          const message = "message" in payload && payload.message ? payload.message : "โหลดข้อมูลงานเอกสารไม่สำเร็จ";
-          throw new Error(message);
-        }
+        const payload = await fetchSummaryDeduped();
 
         if (!isCancelled) {
-          setData(payload as DashboardSummaryResponse);
+          setSummaryData(payload);
         }
       } catch (err) {
         if (!isCancelled) {
@@ -46,7 +99,26 @@ export default function DashboardSummary() {
       }
     }
 
-    void load();
+    async function loadJobs() {
+      setIsJobsLoading(true);
+      try {
+        const payload = await fetchJobsDeduped();
+        if (!isCancelled) {
+          setJobsData(payload);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsJobsLoading(false);
+        }
+      }
+    }
+
+    void loadSummary();
+    void loadJobs();
 
     return () => {
       isCancelled = true;
@@ -61,7 +133,7 @@ export default function DashboardSummary() {
     );
   }
 
-  if (!data) {
+  if (!summaryData) {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -76,11 +148,11 @@ export default function DashboardSummary() {
 
   return (
     <DashboardJobList
-      jobs={data.jobs}
-      initialCompletedCount={data.summary.completedCount}
-      table={data.table}
-      hasUserIdColumn={data.hasUserIdColumn}
-      currentUserId={data.currentUserId}
+      jobs={jobsData?.jobs ?? []}
+      initialCounts={summaryData.summary}
+      isInitialJobsLoading={isJobsLoading}
+      hasUserIdColumn={summaryData.hasUserIdColumn}
+      currentUserId={summaryData.currentUserId}
     />
   );
 }

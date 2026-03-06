@@ -1,15 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
 import StatusActionDialog, { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
   jobs: JobRecord[];
-  initialCompletedCount: number;
-  table: string;
+  initialCounts: {
+    activeCount: number;
+    pendingReviewCount: number;
+    needsFixCount: number;
+    completedCount: number;
+  };
+  isInitialJobsLoading: boolean;
   hasUserIdColumn: boolean;
   currentUserId: string | null;
 };
@@ -181,10 +186,10 @@ const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
   isRemoving: false
 });
 
-export default function DashboardJobList({ jobs, initialCompletedCount, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
+export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoading, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
   const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
-  const [completedCount, setCompletedCount] = useState(initialCompletedCount);
+  const [completedCount, setCompletedCount] = useState(initialCounts.completedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
   const [completedError, setCompletedError] = useState<string | null>(null);
@@ -200,15 +205,23 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    setItems(jobs.map(toDashboardItem));
+  }, [jobs]);
+
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const completedItems = useMemo(() => {
     const base = completedItemsCache ?? [];
     return base.filter((item) => isCompletedStatus(item) && !item.isRemoving);
   }, [completedItemsCache]);
 
-  const totalCount = activeItems.length;
-  const pendingReviewCount = activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
-  const needsFixCount = activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
+  const totalCount = isInitialJobsLoading ? initialCounts.activeCount : activeItems.length;
+  const pendingReviewCount = isInitialJobsLoading
+    ? initialCounts.pendingReviewCount
+    : activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
+  const needsFixCount = isInitialJobsLoading
+    ? initialCounts.needsFixCount
+    : activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
 
   const fetchCompletedItems = async () => {
     if (completedItemsCache || isCompletedLoading) {
@@ -431,7 +444,7 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
     }, 800);
   };
 
-  const hasAnyItems = activeItems.length > 0 || completedCount > 0 || isCompletedLoading;
+  const hasAnyItems = activeItems.length > 0 || completedCount > 0 || isCompletedLoading || isInitialJobsLoading;
 
   if (!hasAnyItems) {
     return (
@@ -534,7 +547,7 @@ export default function DashboardJobList({ jobs, initialCompletedCount, hasUserI
           <p className="col-span-2 text-right">การทำงาน</p>
         </div>
 
-        {isCompletedLoading && currentTab === "completed" ? (
+        {((isCompletedLoading && currentTab === "completed") || (isInitialJobsLoading && currentTab === "active")) ? (
           <div className="divide-y divide-slate-100">
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="grid animate-pulse gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
