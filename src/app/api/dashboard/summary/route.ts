@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { resolveAvailableColumnsForCandidates, resolveJobsTable } from "@/lib/jobs";
+import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const isCompletedStatus = (value: unknown): boolean => {
@@ -18,24 +18,6 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "status",
   "user_id"
 ] as const;
-
-const resolveDashboardSchema = async (
-  supabase: ReturnType<typeof createSupabaseServer>
-): Promise<{ table: string | null; availableColumns: Set<string> }> => {
-  const table = await resolveJobsTable(supabase);
-
-  if (!table) {
-    return { table: null, availableColumns: new Set() };
-  }
-
-  const availableColumns = await resolveAvailableColumnsForCandidates(
-    supabase,
-    table,
-    DASHBOARD_FIELD_CANDIDATES
-  );
-
-  return { table, availableColumns };
-};
 
 export async function GET() {
   console.time("dashboard-summary-route-total");
@@ -60,7 +42,7 @@ export async function GET() {
     let table: string | null;
     let availableColumns: Set<string>;
     try {
-      ({ table, availableColumns } = await resolveDashboardSchema(supabase));
+      ({ table, availableColumns } = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES));
     } finally {
       console.timeEnd("dashboard-summary-resolve-schema");
     }

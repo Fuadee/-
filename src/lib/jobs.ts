@@ -45,6 +45,11 @@ type CachedValue<T> = {
   promise?: Promise<T>;
 };
 
+export type ResolvedJobsSchema = {
+  table: string | null;
+  availableColumns: Set<string>;
+};
+
 let jobsTableCache: CachedValue<string | null> | null = null;
 const columnsByTableCache = new Map<string, CachedValue<Set<string> | null>>();
 const columnsByCandidateCache = new Map<string, CachedValue<Set<string>>>();
@@ -317,6 +322,20 @@ export async function resolveAvailableColumnsForCandidates(
     columnsByCandidateCache.delete(candidateCacheKey);
     throw error;
   }
+}
+
+export async function resolveJobsSchemaForCandidates(
+  supabase: SupabaseClient,
+  candidates: readonly string[]
+): Promise<ResolvedJobsSchema> {
+  const table = await resolveJobsTable(supabase);
+
+  if (!table) {
+    return { table: null, availableColumns: new Set() };
+  }
+
+  const availableColumns = await resolveAvailableColumnsForCandidates(supabase, table, candidates);
+  return { table, availableColumns };
 }
 
 export async function resolveAvailableColumns(
