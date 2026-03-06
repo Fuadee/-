@@ -87,72 +87,98 @@ const DASHBOARD_FIELD_CANDIDATES = [
 ] as const;
 
 export async function GET() {
-  const supabase = createSupabaseServer();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  console.time("dashboard-summary-route-total");
+  try {
+    const supabase = createSupabaseServer();
 
-  if (!user) {
-    return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
-  }
-
-  const { table, availableColumns } = await resolveDashboardSchema(supabase);
-
-  if (!table) {
-    return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
-  }
-
-  const selectedColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column));
-
-  if (!selectedColumns.includes("id")) {
-    return NextResponse.json({ message: "ตารางงานเอกสารต้องมีคอลัมน์ id" }, { status: 500 });
-  }
-
-  let query = supabase.from(table).select(selectedColumns.join(","));
-
-  const orderByColumn = availableColumns.has("created_at") ? "created_at" : "id";
-  query = query.order(orderByColumn, { ascending: false }).limit(20);
-
-  if (availableColumns.has("user_id")) {
-    query = query.eq("user_id", user.id);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
-  }
-
-  const allJobs = (data ?? []) as unknown as Record<string, unknown>[];
-  let activeCount = 0;
-  let pendingReviewCount = 0;
-  let needsFixCount = 0;
-  let completedCount = 0;
-
-  for (const job of allJobs) {
-    if (isCompletedStatus(job.status)) {
-      completedCount += 1;
-      continue;
+    console.time("dashboard-summary-auth-user");
+    let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"];
+    try {
+      ({
+        data: { user }
+      } = await supabase.auth.getUser());
+    } finally {
+      console.timeEnd("dashboard-summary-auth-user");
     }
 
-    activeCount += 1;
-    const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
-    if (normalizedStatus === "pending_review") {
-      pendingReviewCount += 1;
+    if (!user) {
+      return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
     }
-    if (normalizedStatus === "needs_fix") {
-      needsFixCount += 1;
-    }
-  }
 
-  return NextResponse.json({
-    summary: {
-      activeCount,
-      pendingReviewCount,
-      needsFixCount,
-      completedCount
-    },
-    hasUserIdColumn: availableColumns.has("user_id"),
-    currentUserId: user.id
-  });
+    console.time("dashboard-summary-resolve-schema");
+    let table: DashboardSchemaResolution["table"];
+    let availableColumns: DashboardSchemaResolution["availableColumns"];
+    try {
+      ({ table, availableColumns } = await resolveDashboardSchema(supabase));
+    } finally {
+      console.timeEnd("dashboard-summary-resolve-schema");
+    }
+
+    if (!table) {
+      return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
+    }
+
+    const selectedColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column));
+
+    if (!selectedColumns.includes("id")) {
+      return NextResponse.json({ message: "ตารางงานเอกสารต้องมีคอลัมน์ id" }, { status: 500 });
+    }
+
+    let query = supabase.from(table).select(selectedColumns.join(","));
+
+    const orderByColumn = availableColumns.has("created_at") ? "created_at" : "id";
+    query = query.order(orderByColumn, { ascending: false }).limit(20);
+
+    if (availableColumns.has("user_id")) {
+      query = query.eq("user_id", user.id);
+    }
+
+    console.time("dashboard-summary-query");
+    let data: unknown[] | null;
+    let error: { message: string } | null;
+    try {
+      ({ data, error } = await query);
+    } finally {
+      console.timeEnd("dashboard-summary-query");
+    }
+
+    if (error) {
+      return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
+    }
+
+    const allJobs = (data ?? []) as unknown as Record<string, unknown>[];
+    let activeCount = 0;
+    let pendingReviewCount = 0;
+    let needsFixCount = 0;
+    let completedCount = 0;
+
+    for (const job of allJobs) {
+      if (isCompletedStatus(job.status)) {
+        completedCount += 1;
+        continue;
+      }
+
+      activeCount += 1;
+      const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
+      if (normalizedStatus === "pending_review") {
+        pendingReviewCount += 1;
+      }
+      if (normalizedStatus === "needs_fix") {
+        needsFixCount += 1;
+      }
+    }
+
+    return NextResponse.json({
+      summary: {
+        activeCount,
+        pendingReviewCount,
+        needsFixCount,
+        completedCount
+      },
+      hasUserIdColumn: availableColumns.has("user_id"),
+      currentUserId: user.id
+    });
+  } finally {
+    console.timeEnd("dashboard-summary-route-total");
+  }
 }
