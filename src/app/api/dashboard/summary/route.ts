@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
+import { resolveAvailableColumnsForCandidates, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -43,7 +43,11 @@ const resolveDashboardSchema = async (
       return { table: null, availableColumns: new Set() };
     }
 
-    const availableColumns = await resolveAvailableColumns(supabase, table);
+    const availableColumns = await resolveAvailableColumnsForCandidates(
+      supabase,
+      table,
+      DASHBOARD_FIELD_CANDIDATES
+    );
     return { table, availableColumns };
   })();
 
@@ -136,10 +140,6 @@ export async function GET() {
 
     jobs.push(job);
   }
-
-  console.log("[dashboard-summary] total records:", allJobs.length);
-  console.log("[dashboard-summary] completed records:", completedCount);
-  console.log("[dashboard-summary] pending records:", jobs.length);
 
   return NextResponse.json({
     jobs,
