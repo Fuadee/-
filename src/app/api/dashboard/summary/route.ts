@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const isCompletedStatus = (value: unknown): boolean => {
@@ -12,7 +11,7 @@ const isCompletedStatus = (value: unknown): boolean => {
   return normalized === "completed" || normalized === "ดำเนินการแล้วเสร็จ";
 };
 
-const DASHBOARD_FIELD_CANDIDATES = [
+const DASHBOARD_COLUMNS = [
   "id",
   "title",
   "case_title",
@@ -23,6 +22,111 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "tax_id",
   "payload"
 ] as const;
+
+const DASHBOARD_TABLE_FALLBACKS = ["generated_docs", "doc_jobs", "documents", "jobs"] as const;
+const DASHBOARD_TABLE_ENV = process.env.DASHBOARD_SUMMARY_TABLE?.trim();
+const DEFAULT_DASHBOARD_TABLE = DASHBOARD_TABLE_ENV || DASHBOARD_TABLE_FALLBACKS[0];
+
+let cachedSummaryTable = DEFAULT_DASHBOARD_TABLE;
+let cachedHasUserIdColumn = true;
+
+const SELECT_WITH_USER_ID = DASHBOARD_COLUMNS.join(",");
+const SELECT_WITHOUT_USER_ID = DASHBOARD_COLUMNS.filter((column) => column !== "user_id").join(",");
+
+const isMissingUserIdColumnError = (error: { message?: string; code?: string } | null): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  const message = (error.message ?? "").toLowerCase();
+  return (
+    error.code === "42703" ||
+    (message.includes("column") && message.includes("user_id") && message.includes("does not exist"))
+  );
+};
+
+const getTableCandidates = (): string[] => {
+  const unique = new Set<string>([cachedSummaryTable, ...DASHBOARD_TABLE_FALLBACKS]);
+  return Array.from(unique);
+};
+
+const fetchSummaryRows = async (
+  supabase: ReturnType<typeof createSupabaseServer>,
+  userId: string
+): Promise<{
+  data: Record<string, unknown>[];
+  error: { message?: string; code?: string } | null;
+  table: string;
+  hasUserIdColumn: boolean;
+}> => {
+  const tableCandidates = getTableCandidates();
+
+  for (const table of tableCandidates) {
+    const selectColumns = cachedHasUserIdColumn ? SELECT_WITH_USER_ID : SELECT_WITHOUT_USER_ID;
+
+    let query = supabase.from(table).select(selectColumns).order("created_at", { ascending: false }).limit(20);
+
+    if (cachedHasUserIdColumn) {
+      query = query.eq("user_id", userId);
+    }
+
+    const firstAttempt = await query;
+
+    if (!firstAttempt.error) {
+      cachedSummaryTable = table;
+      return {
+        data: (firstAttempt.data ?? []) as unknown as Record<string, unknown>[],
+        error: null,
+        table,
+        hasUserIdColumn: cachedHasUserIdColumn
+      };
+    }
+
+    if (cachedHasUserIdColumn && isMissingUserIdColumnError(firstAttempt.error)) {
+      const fallbackAttempt = await supabase
+        .from(table)
+        .select(SELECT_WITHOUT_USER_ID)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (!fallbackAttempt.error) {
+        cachedSummaryTable = table;
+        cachedHasUserIdColumn = false;
+        return {
+          data: (fallbackAttempt.data ?? []) as unknown as Record<string, unknown>[],
+          error: null,
+          table,
+          hasUserIdColumn: false
+        };
+      }
+
+      return {
+        data: [],
+        error: fallbackAttempt.error,
+        table,
+        hasUserIdColumn: false
+      };
+    }
+
+    if (table !== tableCandidates[tableCandidates.length - 1]) {
+      continue;
+    }
+
+    return {
+      data: [],
+      error: firstAttempt.error,
+      table,
+      hasUserIdColumn: cachedHasUserIdColumn
+    };
+  }
+
+  return {
+    data: [],
+    error: { message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" },
+    table: cachedSummaryTable,
+    hasUserIdColumn: cachedHasUserIdColumn
+  };
+};
 
 export async function GET() {
   console.time("dashboard-summary-route-total");
@@ -38,37 +142,8 @@ export async function GET() {
     return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
   }
 
-  console.time("dashboard-summary-resolve-table");
-  const table = await resolveJobsTable(supabase);
-  console.timeEnd("dashboard-summary-resolve-table");
-
-  if (!table) {
-    console.timeEnd("dashboard-summary-route-total");
-    return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
-  }
-
-  console.time("dashboard-summary-resolve-columns");
-  const availableColumns = await resolveAvailableColumns(supabase, table);
-  console.timeEnd("dashboard-summary-resolve-columns");
-  const selectedColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column));
-
-  if (!selectedColumns.includes("id")) {
-    console.timeEnd("dashboard-summary-route-total");
-    return NextResponse.json({ message: "ตารางงานเอกสารต้องมีคอลัมน์ id" }, { status: 500 });
-  }
-
-  let query = supabase
-    .from(table)
-    .select(selectedColumns.join(","))
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  if (availableColumns.has("user_id")) {
-    query = query.eq("user_id", user.id);
-  }
-
   console.time("dashboard-summary-total");
-  const { data, error } = await query;
+  const { data, error, table, hasUserIdColumn } = await fetchSummaryRows(supabase, user.id);
   console.timeEnd("dashboard-summary-total");
 
   if (error) {
@@ -101,7 +176,7 @@ export async function GET() {
       completedCount
     },
     table,
-    hasUserIdColumn: availableColumns.has("user_id"),
+    hasUserIdColumn,
     currentUserId: user.id
   });
 }
