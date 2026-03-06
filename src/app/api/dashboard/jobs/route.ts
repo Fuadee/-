@@ -3,69 +3,19 @@ import { NextResponse } from "next/server";
 import { resolveAvailableColumnsForCandidates, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
-const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000;
-
-type DashboardSchemaResolution = {
-  table: string | null;
-  availableColumns: Set<string>;
-};
-
-let dashboardSchemaCache:
-  | {
-      expiresAt: number;
-      value?: DashboardSchemaResolution;
-      promise?: Promise<DashboardSchemaResolution>;
-    }
-  | null = null;
-
-const cloneResolution = (resolution: DashboardSchemaResolution): DashboardSchemaResolution => ({
-  table: resolution.table,
-  availableColumns: new Set(resolution.availableColumns)
-});
-
 const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
 
 const resolveDashboardSchema = async (
   supabase: ReturnType<typeof createSupabaseServer>
-): Promise<DashboardSchemaResolution> => {
-  const now = Date.now();
+): Promise<{ table: string | null; availableColumns: Set<string> }> => {
+  const table = await resolveJobsTable(supabase);
 
-  if (dashboardSchemaCache?.value && dashboardSchemaCache.expiresAt > now) {
-    return cloneResolution(dashboardSchemaCache.value);
+  if (!table) {
+    return { table: null, availableColumns: new Set() };
   }
 
-  if (dashboardSchemaCache?.promise) {
-    return cloneResolution(await dashboardSchemaCache.promise);
-  }
-
-  const resolutionPromise = (async (): Promise<DashboardSchemaResolution> => {
-    const table = await resolveJobsTable(supabase);
-
-    if (!table) {
-      return { table: null, availableColumns: new Set() };
-    }
-
-    const availableColumns = await resolveAvailableColumnsForCandidates(supabase, table, DASHBOARD_FIELD_CANDIDATES);
-    return { table, availableColumns };
-  })();
-
-  dashboardSchemaCache = {
-    expiresAt: now + SCHEMA_CACHE_TTL_MS,
-    promise: resolutionPromise
-  };
-
-  try {
-    const value = await resolutionPromise;
-    dashboardSchemaCache = {
-      expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
-      value
-    };
-
-    return cloneResolution(value);
-  } catch (error) {
-    dashboardSchemaCache = null;
-    throw error;
-  }
+  const availableColumns = await resolveAvailableColumnsForCandidates(supabase, table, DASHBOARD_FIELD_CANDIDATES);
+  return { table, availableColumns };
 };
 
 const isCompletedStatus = (value: unknown): boolean => {

@@ -32,6 +32,25 @@ type InformationSchemaColumnRow = {
   column_name: string | null;
 };
 
+type InformationSchemaTableRow = {
+  table_name: string | null;
+};
+
+const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000;
+
+type CachedValue<T> = {
+  expiresAt: number;
+  value?: T;
+  promise?: Promise<T>;
+};
+
+let jobsTableCache: CachedValue<string | null> | null = null;
+const columnsByTableCache = new Map<string, CachedValue<Set<string> | null>>();
+
+const hasFreshValue = <T>(entry: CachedValue<T> | null | undefined): entry is CachedValue<T> & { value: T } =>
+  Boolean(entry?.value !== undefined && entry.expiresAt > Date.now());
+
+
 export type JobRecord = Record<string, unknown> & {
   revision_note?: string | null;
   revision_requested_at?: string | null;
@@ -41,6 +60,38 @@ export type JobRecord = Record<string, unknown> & {
 };
 
 export async function resolveJobsTable(supabase: SupabaseClient): Promise<string | null> {
+  if (hasFreshValue(jobsTableCache)) {
+    return jobsTableCache.value;
+  }
+
+  if (jobsTableCache?.promise) {
+    return jobsTableCache.promise;
+  }
+
+  const resolutionPromise = (async (): Promise<string | null> => {
+    const { data, error } = await supabase
+      .schema("information_schema")
+      .from("tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .in("table_name", [...JOB_TABLE_CANDIDATES]);
+
+    if (!error && data) {
+      const existingTables = new Set(
+        (data as InformationSchemaTableRow[])
+          .map((row) => row.table_name)
+          .filter((table): table is string => typeof table === "string")
+      );
+
+      for (const table of JOB_TABLE_CANDIDATES) {
+        if (existingTables.has(table)) {
+          return table;
+        }
+      }
+
+      return null;
+    }
+
   const availability = await Promise.all(
     JOB_TABLE_CANDIDATES.map(async (table) => {
       const { error } = await supabase.from(table).select("id", { head: true, count: "planned" }).limit(1);
@@ -55,6 +106,24 @@ export async function resolveJobsTable(supabase: SupabaseClient): Promise<string
   }
 
   return null;
+  })();
+
+  jobsTableCache = {
+    expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+    promise: resolutionPromise
+  };
+
+  try {
+    const value = await resolutionPromise;
+    jobsTableCache = {
+      expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+      value
+    };
+    return value;
+  } catch (error) {
+    jobsTableCache = null;
+    throw error;
+  }
 }
 
 async function introspectColumns(supabase: SupabaseClient, table: string): Promise<Set<string> | null> {
@@ -76,12 +145,43 @@ async function introspectColumns(supabase: SupabaseClient, table: string): Promi
   );
 }
 
+async function resolveColumnsForTable(supabase: SupabaseClient, table: string): Promise<Set<string> | null> {
+  const cacheEntry = columnsByTableCache.get(table);
+
+  if (hasFreshValue(cacheEntry)) {
+    return cacheEntry.value ? new Set(cacheEntry.value) : null;
+  }
+
+  if (cacheEntry?.promise) {
+    const pendingValue = await cacheEntry.promise;
+    return pendingValue ? new Set(pendingValue) : null;
+  }
+
+  const resolutionPromise = introspectColumns(supabase, table);
+  columnsByTableCache.set(table, {
+    expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+    promise: resolutionPromise
+  });
+
+  try {
+    const value = await resolutionPromise;
+    columnsByTableCache.set(table, {
+      expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+      value: value ? new Set(value) : null
+    });
+    return value ? new Set(value) : null;
+  } catch (error) {
+    columnsByTableCache.delete(table);
+    throw error;
+  }
+}
+
 export async function resolveAvailableColumnsForCandidates(
   supabase: SupabaseClient,
   table: string,
   candidates: readonly string[]
 ): Promise<Set<string>> {
-  const introspectedColumns = await introspectColumns(supabase, table);
+  const introspectedColumns = await resolveColumnsForTable(supabase, table);
 
   if (introspectedColumns) {
     return new Set(candidates.filter((column) => introspectedColumns.has(column)));
