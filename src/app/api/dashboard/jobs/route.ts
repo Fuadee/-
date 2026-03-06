@@ -23,6 +23,8 @@ const cloneResolution = (resolution: DashboardSchemaResolution): DashboardSchema
   availableColumns: new Set(resolution.availableColumns)
 });
 
+const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+
 const resolveDashboardSchema = async (
   supabase: ReturnType<typeof createSupabaseServer>
 ): Promise<DashboardSchemaResolution> => {
@@ -43,11 +45,7 @@ const resolveDashboardSchema = async (
       return { table: null, availableColumns: new Set() };
     }
 
-    const availableColumns = await resolveAvailableColumnsForCandidates(
-      supabase,
-      table,
-      DASHBOARD_FIELD_CANDIDATES
-    );
+    const availableColumns = await resolveAvailableColumnsForCandidates(supabase, table, DASHBOARD_FIELD_CANDIDATES);
     return { table, availableColumns };
   })();
 
@@ -79,13 +77,6 @@ const isCompletedStatus = (value: unknown): boolean => {
   return normalized === "completed" || normalized === "ดำเนินการแล้วเสร็จ";
 };
 
-const DASHBOARD_FIELD_CANDIDATES = [
-  "id",
-  "created_at",
-  "status",
-  "user_id"
-] as const;
-
 export async function GET() {
   const supabase = createSupabaseServer();
   const {
@@ -102,7 +93,9 @@ export async function GET() {
     return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
   }
 
-  const selectedColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column));
+  const selectedColumns = DASHBOARD_FIELD_CANDIDATES.filter(
+    (column) => availableColumns.has(column) && column !== "user_id"
+  );
 
   if (!selectedColumns.includes("id")) {
     return NextResponse.json({ message: "ตารางงานเอกสารต้องมีคอลัมน์ id" }, { status: 500 });
@@ -123,36 +116,9 @@ export async function GET() {
     return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
   }
 
-  const allJobs = (data ?? []) as unknown as Record<string, unknown>[];
-  let activeCount = 0;
-  let pendingReviewCount = 0;
-  let needsFixCount = 0;
-  let completedCount = 0;
-
-  for (const job of allJobs) {
-    if (isCompletedStatus(job.status)) {
-      completedCount += 1;
-      continue;
-    }
-
-    activeCount += 1;
-    const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
-    if (normalizedStatus === "pending_review") {
-      pendingReviewCount += 1;
-    }
-    if (normalizedStatus === "needs_fix") {
-      needsFixCount += 1;
-    }
-  }
+  const jobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
 
   return NextResponse.json({
-    summary: {
-      activeCount,
-      pendingReviewCount,
-      needsFixCount,
-      completedCount
-    },
-    hasUserIdColumn: availableColumns.has("user_id"),
-    currentUserId: user.id
+    jobs
   });
 }
