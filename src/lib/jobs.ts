@@ -29,6 +29,7 @@ const COLUMN_PROBE_CANDIDATES = [
 ] as const;
 
 type InformationSchemaColumnRow = {
+  table_name?: string | null;
   column_name: string | null;
 };
 
@@ -46,9 +47,89 @@ type CachedValue<T> = {
 
 let jobsTableCache: CachedValue<string | null> | null = null;
 const columnsByTableCache = new Map<string, CachedValue<Set<string> | null>>();
+const columnsByCandidateCache = new Map<string, CachedValue<Set<string>>>();
+let schemaWarmupCache: CachedValue<boolean> | null = null;
 
 const hasFreshValue = <T>(entry: CachedValue<T> | null | undefined): entry is CachedValue<T> & { value: T } =>
   Boolean(entry?.value !== undefined && entry.expiresAt > Date.now());
+
+const makeCandidateCacheKey = (table: string, candidates: readonly string[]): string => {
+  const normalizedCandidates = [...new Set(candidates)].sort();
+  return `${table}::${normalizedCandidates.join("|")}`;
+};
+
+const cacheValueWithTtl = <T>(value: T): CachedValue<T> => ({
+  expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+  value
+});
+
+async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
+  if (hasFreshValue(schemaWarmupCache)) {
+    return schemaWarmupCache.value;
+  }
+
+  if (schemaWarmupCache?.promise) {
+    return schemaWarmupCache.promise;
+  }
+
+  const resolutionPromise = (async () => {
+    const { data, error } = await supabase
+      .schema("information_schema")
+      .from("columns")
+      .select("table_name,column_name")
+      .eq("table_schema", "public")
+      .in("table_name", [...JOB_TABLE_CANDIDATES]);
+
+    if (error || !data) {
+      return false;
+    }
+
+    const columnsByTable = new Map<string, Set<string>>();
+
+    for (const row of data as InformationSchemaColumnRow[]) {
+      if (typeof row.table_name !== "string" || typeof row.column_name !== "string") {
+        continue;
+      }
+
+      if (!columnsByTable.has(row.table_name)) {
+        columnsByTable.set(row.table_name, new Set());
+      }
+
+      columnsByTable.get(row.table_name)?.add(row.column_name);
+    }
+
+    for (const table of JOB_TABLE_CANDIDATES) {
+      if (columnsByTable.has(table)) {
+        columnsByTableCache.set(table, cacheValueWithTtl(new Set(columnsByTable.get(table))));
+      }
+    }
+
+    let resolvedTable: string | null = null;
+    for (const table of JOB_TABLE_CANDIDATES) {
+      if (columnsByTable.has(table)) {
+        resolvedTable = table;
+        break;
+      }
+    }
+
+    jobsTableCache = cacheValueWithTtl(resolvedTable);
+    return true;
+  })();
+
+  schemaWarmupCache = {
+    expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+    promise: resolutionPromise
+  };
+
+  try {
+    const value = await resolutionPromise;
+    schemaWarmupCache = cacheValueWithTtl(value);
+    return value;
+  } catch (error) {
+    schemaWarmupCache = null;
+    throw error;
+  }
+}
 
 
 export type JobRecord = Record<string, unknown> & {
@@ -60,6 +141,11 @@ export type JobRecord = Record<string, unknown> & {
 };
 
 export async function resolveJobsTable(supabase: SupabaseClient): Promise<string | null> {
+  if (hasFreshValue(jobsTableCache)) {
+    return jobsTableCache.value;
+  }
+
+  await warmSchemaCaches(supabase);
   if (hasFreshValue(jobsTableCache)) {
     return jobsTableCache.value;
   }
@@ -157,6 +243,12 @@ async function resolveColumnsForTable(supabase: SupabaseClient, table: string): 
     return pendingValue ? new Set(pendingValue) : null;
   }
 
+  await warmSchemaCaches(supabase);
+  const warmedCacheEntry = columnsByTableCache.get(table);
+  if (hasFreshValue(warmedCacheEntry)) {
+    return warmedCacheEntry.value ? new Set(warmedCacheEntry.value) : null;
+  }
+
   const resolutionPromise = introspectColumns(supabase, table);
   columnsByTableCache.set(table, {
     expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
@@ -181,13 +273,27 @@ export async function resolveAvailableColumnsForCandidates(
   table: string,
   candidates: readonly string[]
 ): Promise<Set<string>> {
+  const candidateCacheKey = makeCandidateCacheKey(table, candidates);
+  const candidateCacheEntry = columnsByCandidateCache.get(candidateCacheKey);
+
+  if (hasFreshValue(candidateCacheEntry)) {
+    return new Set(candidateCacheEntry.value);
+  }
+
+  if (candidateCacheEntry?.promise) {
+    const pendingValue = await candidateCacheEntry.promise;
+    return new Set(pendingValue);
+  }
+
   const introspectedColumns = await resolveColumnsForTable(supabase, table);
 
   if (introspectedColumns) {
-    return new Set(candidates.filter((column) => introspectedColumns.has(column)));
+    const availableColumns = new Set(candidates.filter((column) => introspectedColumns.has(column)));
+    columnsByCandidateCache.set(candidateCacheKey, cacheValueWithTtl(new Set(availableColumns)));
+    return availableColumns;
   }
 
-  const checks = await Promise.all(
+  const resolutionPromise = Promise.all(
     candidates.map(async (column) => {
       const { error } = await supabase
         .from(table)
@@ -196,9 +302,21 @@ export async function resolveAvailableColumnsForCandidates(
 
       return { column, exists: !error };
     })
-  );
+  ).then((checks) => new Set(checks.filter((entry) => entry.exists).map((entry) => entry.column)));
 
-  return new Set(checks.filter((entry) => entry.exists).map((entry) => entry.column));
+  columnsByCandidateCache.set(candidateCacheKey, {
+    expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+    promise: resolutionPromise
+  });
+
+  try {
+    const value = await resolutionPromise;
+    columnsByCandidateCache.set(candidateCacheKey, cacheValueWithTtl(new Set(value)));
+    return value;
+  } catch (error) {
+    columnsByCandidateCache.delete(candidateCacheKey);
+    throw error;
+  }
 }
 
 export async function resolveAvailableColumns(
