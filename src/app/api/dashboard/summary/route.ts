@@ -3,73 +3,6 @@ import { NextResponse } from "next/server";
 import { resolveAvailableColumnsForCandidates, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
-const SCHEMA_CACHE_TTL_MS = 5 * 60 * 1000;
-
-type DashboardSchemaResolution = {
-  table: string | null;
-  availableColumns: Set<string>;
-};
-
-let dashboardSchemaCache:
-  | {
-      expiresAt: number;
-      value?: DashboardSchemaResolution;
-      promise?: Promise<DashboardSchemaResolution>;
-    }
-  | null = null;
-
-const cloneResolution = (resolution: DashboardSchemaResolution): DashboardSchemaResolution => ({
-  table: resolution.table,
-  availableColumns: new Set(resolution.availableColumns)
-});
-
-const resolveDashboardSchema = async (
-  supabase: ReturnType<typeof createSupabaseServer>
-): Promise<DashboardSchemaResolution> => {
-  const now = Date.now();
-
-  if (dashboardSchemaCache?.value && dashboardSchemaCache.expiresAt > now) {
-    return cloneResolution(dashboardSchemaCache.value);
-  }
-
-  if (dashboardSchemaCache?.promise) {
-    return cloneResolution(await dashboardSchemaCache.promise);
-  }
-
-  const resolutionPromise = (async (): Promise<DashboardSchemaResolution> => {
-    const table = await resolveJobsTable(supabase);
-
-    if (!table) {
-      return { table: null, availableColumns: new Set() };
-    }
-
-    const availableColumns = await resolveAvailableColumnsForCandidates(
-      supabase,
-      table,
-      DASHBOARD_FIELD_CANDIDATES
-    );
-    return { table, availableColumns };
-  })();
-
-  dashboardSchemaCache = {
-    expiresAt: now + SCHEMA_CACHE_TTL_MS,
-    promise: resolutionPromise
-  };
-
-  try {
-    const value = await resolutionPromise;
-    dashboardSchemaCache = {
-      expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
-      value
-    };
-
-    return cloneResolution(value);
-  } catch (error) {
-    dashboardSchemaCache = null;
-    throw error;
-  }
-};
-
 const isCompletedStatus = (value: unknown): boolean => {
   if (typeof value !== "string") {
     return false;
@@ -85,6 +18,24 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "status",
   "user_id"
 ] as const;
+
+const resolveDashboardSchema = async (
+  supabase: ReturnType<typeof createSupabaseServer>
+): Promise<{ table: string | null; availableColumns: Set<string> }> => {
+  const table = await resolveJobsTable(supabase);
+
+  if (!table) {
+    return { table: null, availableColumns: new Set() };
+  }
+
+  const availableColumns = await resolveAvailableColumnsForCandidates(
+    supabase,
+    table,
+    DASHBOARD_FIELD_CANDIDATES
+  );
+
+  return { table, availableColumns };
+};
 
 export async function GET() {
   console.time("dashboard-summary-route-total");
@@ -106,8 +57,8 @@ export async function GET() {
     }
 
     console.time("dashboard-summary-resolve-schema");
-    let table: DashboardSchemaResolution["table"];
-    let availableColumns: DashboardSchemaResolution["availableColumns"];
+    let table: string | null;
+    let availableColumns: Set<string>;
     try {
       ({ table, availableColumns } = await resolveDashboardSchema(supabase));
     } finally {
