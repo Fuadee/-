@@ -38,7 +38,14 @@ export type JobRecord = Record<string, unknown> & {
 
 export async function resolveJobsTable(supabase: SupabaseClient): Promise<string | null> {
   for (const table of JOB_TABLE_CANDIDATES) {
-    const { error } = await supabase.from(table).select("*").limit(1);
+    const timer = `summary-resolve-table-${table}`;
+    console.time(timer);
+    const { error } = await supabase
+      .from(table)
+      .select("*", { head: true, count: "planned" })
+      .limit(1);
+    console.timeEnd(timer);
+
     if (!error) {
       return table;
     }
@@ -54,7 +61,14 @@ export async function resolveAvailableColumns(
   const columns = new Set<string>();
 
   for (const column of COLUMN_PROBE_CANDIDATES) {
-    const { error } = await supabase.from(table).select(column).limit(1);
+    const timer = `summary-resolve-column-${table}.${column}`;
+    console.time(timer);
+    const { error } = await supabase
+      .from(table)
+      .select(column, { head: true, count: "planned" })
+      .limit(1);
+    console.timeEnd(timer);
+
     if (!error) {
       columns.add(column);
     }
