@@ -1,22 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { resolveAvailableColumnsForCandidates, resolveJobsTable } from "@/lib/jobs";
+import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
-
-const resolveDashboardSchema = async (
-  supabase: ReturnType<typeof createSupabaseServer>
-): Promise<{ table: string | null; availableColumns: Set<string> }> => {
-  const table = await resolveJobsTable(supabase);
-
-  if (!table) {
-    return { table: null, availableColumns: new Set() };
-  }
-
-  const availableColumns = await resolveAvailableColumnsForCandidates(supabase, table, DASHBOARD_FIELD_CANDIDATES);
-  return { table, availableColumns };
-};
 
 const isCompletedStatus = (value: unknown): boolean => {
   if (typeof value !== "string") {
@@ -37,7 +24,7 @@ export async function GET() {
     return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
   }
 
-  const { table, availableColumns } = await resolveDashboardSchema(supabase);
+  const { table, availableColumns } = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
 
   if (!table) {
     return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
