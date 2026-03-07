@@ -30,8 +30,43 @@ const isCompletedStatus = (value: unknown): boolean => {
   return normalized === "completed" || normalized === "ดำเนินการแล้วเสร็จ";
 };
 
-const shouldUseStaticDashboardSchema = (): boolean =>
-  process.env.NODE_ENV === "production" && process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA !== "true";
+const isEnabledEnvFlag = (value: string | undefined): boolean => value?.toLowerCase() === "true";
+
+type StaticSchemaDecision = {
+  enabled: boolean;
+  reason: string;
+};
+
+const resolveStaticDashboardSchemaDecision = (): StaticSchemaDecision => {
+  const forceStaticSchema = isEnabledEnvFlag(process.env.DASHBOARD_OVERVIEW_FORCE_STATIC);
+  const forceDynamicSchema = isEnabledEnvFlag(process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA);
+
+  if (forceStaticSchema && forceDynamicSchema) {
+    return {
+      enabled: true,
+      reason: "DASHBOARD_OVERVIEW_FORCE_STATIC=true overrides DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA=true"
+    };
+  }
+
+  if (forceStaticSchema) {
+    return {
+      enabled: true,
+      reason: "DASHBOARD_OVERVIEW_FORCE_STATIC=true"
+    };
+  }
+
+  if (forceDynamicSchema) {
+    return {
+      enabled: false,
+      reason: "DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA=true"
+    };
+  }
+
+  return {
+    enabled: true,
+    reason: "default static enabled; fallback to dynamic only when canonical table is unavailable or minimum columns are missing"
+  };
+};
 
 const parsePayload = (value: unknown): Record<string, unknown> | null => {
   if (typeof value === "string") {
@@ -77,6 +112,7 @@ type DashboardSchemaResolution = {
   introspectedColumns: string[];
   missingMinimumColumns: string[];
   schemaMode: "static" | "dynamic-fallback";
+  staticSchemaDecision: StaticSchemaDecision;
   fallbackReason?: "canonical table unavailable" | "minimum columns missing" | "no usable overview columns" | "static schema disabled";
 };
 
@@ -86,7 +122,9 @@ const getMissingColumns = (availableColumns: Set<string>, requiredColumns: reado
 const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort((a, b) => a.localeCompare(b));
 
 const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>): Promise<DashboardSchemaResolution> => {
-  if (shouldUseStaticDashboardSchema()) {
+  const staticSchemaDecision = resolveStaticDashboardSchemaDecision();
+
+  if (staticSchemaDecision.enabled) {
     const canonicalColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
     const missingMinimumColumns = getMissingColumns(canonicalColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
     const introspectedColumns = toSortedColumnList(canonicalColumns);
@@ -98,6 +136,7 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
         introspectedColumns,
         missingMinimumColumns,
         schemaMode: "dynamic-fallback",
+        staticSchemaDecision,
         fallbackReason: "canonical table unavailable"
       };
     }
@@ -109,6 +148,7 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
         introspectedColumns,
         missingMinimumColumns,
         schemaMode: "dynamic-fallback",
+        staticSchemaDecision,
         fallbackReason: "minimum columns missing"
       };
     }
@@ -118,7 +158,8 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
       availableColumns: canonicalColumns,
       introspectedColumns,
       missingMinimumColumns,
-      schemaMode: "static"
+      schemaMode: "static",
+      staticSchemaDecision
     };
   }
 
@@ -128,6 +169,7 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
     introspectedColumns: toSortedColumnList(fallbackSchema.availableColumns),
     missingMinimumColumns: getMissingColumns(fallbackSchema.availableColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES),
     schemaMode: "dynamic-fallback",
+    staticSchemaDecision,
     fallbackReason: "static schema disabled"
   };
 };
@@ -157,12 +199,17 @@ export async function GET() {
     let introspectedColumns: string[];
     let missingMinimumColumns: string[];
     let schemaMode: DashboardSchemaResolution["schemaMode"];
+    let staticSchemaDecision: DashboardSchemaResolution["staticSchemaDecision"];
     let fallbackReason: DashboardSchemaResolution["fallbackReason"];
     try {
-      ({ table, availableColumns, introspectedColumns, missingMinimumColumns, schemaMode, fallbackReason } = await resolveDashboardSchema(supabase));
+      ({ table, availableColumns, introspectedColumns, missingMinimumColumns, schemaMode, staticSchemaDecision, fallbackReason } = await resolveDashboardSchema(supabase));
     } finally {
       console.timeEnd("dashboard-overview-resolve-schema");
     }
+
+    console.info(
+      `dashboard-overview-static-schema: ${staticSchemaDecision.enabled ? "enabled" : "disabled"} (reason=${staticSchemaDecision.reason}; force_static=${process.env.DASHBOARD_OVERVIEW_FORCE_STATIC ?? "unset"}; dynamic_schema=${process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA ?? "unset"}; node_env=${process.env.NODE_ENV ?? "unset"})`
+    );
 
     const conciseColumns = introspectedColumns.join(",");
     const missingMinimumColumnsLabel = missingMinimumColumns.join(",") || "none";
