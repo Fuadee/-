@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
+import { resolveAvailableColumnsForCandidates, resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
-const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+const DASHBOARD_REQUIRED_FIELD_CANDIDATES = ["id", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+const DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES = ["title", "case_title", "name"] as const;
+const DASHBOARD_FIELD_CANDIDATES = [...DASHBOARD_REQUIRED_FIELD_CANDIDATES, ...DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES] as const;
 const DASHBOARD_CANONICAL_TABLE = "generated_docs";
-const DASHBOARD_CANONICAL_COLUMNS = new Set<string>(DASHBOARD_FIELD_CANDIDATES);
+
+const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
 
 const COMPLETED_STATUSES = ["completed", "ดำเนินการแล้วเสร็จ"] as const;
 const PENDING_STATUSES = ["pending", "pending_review", "pending_approval", "awaiting_payment", "รอตรวจ", "รออนุมัติ", "รอเบิกจ่าย"] as const;
@@ -24,12 +27,63 @@ const isCompletedStatus = (value: unknown): boolean => {
 const shouldUseStaticDashboardSchema = (): boolean =>
   process.env.NODE_ENV === "production" && process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA !== "true";
 
+const parsePayload = (value: unknown): Record<string, unknown> | null => {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+};
+
+const asNonEmptyString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const resolveTitleWithFallback = (job: Record<string, unknown>): string => {
+  const directTitle = asNonEmptyString(job.title) ?? asNonEmptyString(job.case_title) ?? asNonEmptyString(job.name);
+  if (directTitle) {
+    return directTitle;
+  }
+
+  const payload = parsePayload(job.payload);
+  const payloadTitle =
+    asNonEmptyString(payload?.title) ??
+    asNonEmptyString(payload?.case_title) ??
+    asNonEmptyString(payload?.name) ??
+    asNonEmptyString(payload?.subject_detail);
+
+  return payloadTitle ?? DASHBOARD_FALLBACK_TITLE;
+};
+
+const resolveCanonicalDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>) => {
+  const availableColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
+
+  if (availableColumns.size === 0 || !availableColumns.has("id")) {
+    return null;
+  }
+
+  return {
+    table: DASHBOARD_CANONICAL_TABLE,
+    availableColumns
+  };
+};
+
 const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>) => {
   if (shouldUseStaticDashboardSchema()) {
-    return {
-      table: DASHBOARD_CANONICAL_TABLE,
-      availableColumns: new Set(DASHBOARD_CANONICAL_COLUMNS)
-    };
+    const canonicalSchema = await resolveCanonicalDashboardSchema(supabase);
+    if (canonicalSchema) {
+      return canonicalSchema;
+    }
   }
 
   return resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
@@ -138,7 +192,12 @@ export async function GET() {
         return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsError.message}` }, { status: 500 });
       }
 
-      jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+      jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[])
+        .filter((job) => !isCompletedStatus(job.status))
+        .map((job) => ({
+          ...job,
+          title: resolveTitleWithFallback(job)
+        }));
     } finally {
       console.timeEnd("dashboard-overview-jobs-query");
     }
