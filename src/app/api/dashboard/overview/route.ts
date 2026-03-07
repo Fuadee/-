@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { resolveAvailableColumnsForCandidates, resolveJobsSchemaForCandidates } from "@/lib/jobs";
+import { JOB_TABLE_CANDIDATES, resolveAvailableColumnsForCandidates, resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
-const DASHBOARD_REQUIRED_FIELD_CANDIDATES = ["id", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+const DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES = ["id"] as const;
+const DASHBOARD_CORE_QUERY_FIELD_CANDIDATES = ["id", "created_at", "status", "user_id"] as const;
+const DASHBOARD_OPTIONAL_FIELD_CANDIDATES = ["tax_id", "payload"] as const;
 const DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES = ["title", "case_title", "name"] as const;
-const DASHBOARD_FIELD_CANDIDATES = [...DASHBOARD_REQUIRED_FIELD_CANDIDATES, ...DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES] as const;
+const DASHBOARD_FIELD_CANDIDATES = [
+  ...DASHBOARD_CORE_QUERY_FIELD_CANDIDATES,
+  ...DASHBOARD_OPTIONAL_FIELD_CANDIDATES,
+  ...DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES
+] as const;
 const DASHBOARD_CANONICAL_TABLE = "generated_docs";
 
 const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
@@ -68,57 +74,61 @@ const resolveTitleWithFallback = (job: Record<string, unknown>): string => {
 type DashboardSchemaResolution = {
   table: string | null;
   availableColumns: Set<string>;
+  introspectedColumns: string[];
+  missingMinimumColumns: string[];
   schemaMode: "static" | "dynamic-fallback";
-  fallbackReason?: "canonical table unavailable" | "id column missing" | "no usable overview columns" | "static introspection returned insufficient columns";
+  fallbackReason?: "canonical table unavailable" | "minimum columns missing" | "no usable overview columns" | "static schema disabled";
 };
+
+const getMissingColumns = (availableColumns: Set<string>, requiredColumns: readonly string[]): string[] =>
+  requiredColumns.filter((column) => !availableColumns.has(column));
+
+const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort((a, b) => a.localeCompare(b));
 
 const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>): Promise<DashboardSchemaResolution> => {
   if (shouldUseStaticDashboardSchema()) {
     const canonicalColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
+    const missingMinimumColumns = getMissingColumns(canonicalColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
+    const introspectedColumns = toSortedColumnList(canonicalColumns);
 
     if (canonicalColumns.size === 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
       return {
         ...fallbackSchema,
+        introspectedColumns,
+        missingMinimumColumns,
         schemaMode: "dynamic-fallback",
         fallbackReason: "canonical table unavailable"
       };
     }
 
-    if (!canonicalColumns.has("id")) {
+    if (missingMinimumColumns.length > 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
       return {
         ...fallbackSchema,
+        introspectedColumns,
+        missingMinimumColumns,
         schemaMode: "dynamic-fallback",
-        fallbackReason: "id column missing"
+        fallbackReason: "minimum columns missing"
       };
     }
 
-    const canonicalSchema = {
-      table: DASHBOARD_CANONICAL_TABLE,
-      availableColumns: canonicalColumns
-    };
-
-    if (canonicalSchema) {
-      return {
-        ...canonicalSchema,
-        schemaMode: "static"
-      };
-    }
-
-    const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
     return {
-      ...fallbackSchema,
-      schemaMode: "dynamic-fallback",
-      fallbackReason: "static introspection returned insufficient columns"
+      table: DASHBOARD_CANONICAL_TABLE,
+      availableColumns: canonicalColumns,
+      introspectedColumns,
+      missingMinimumColumns,
+      schemaMode: "static"
     };
   }
 
   const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
   return {
     ...fallbackSchema,
+    introspectedColumns: toSortedColumnList(fallbackSchema.availableColumns),
+    missingMinimumColumns: getMissingColumns(fallbackSchema.availableColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES),
     schemaMode: "dynamic-fallback",
-    fallbackReason: "static introspection returned insufficient columns"
+    fallbackReason: "static schema disabled"
   };
 };
 
@@ -144,21 +154,29 @@ export async function GET() {
     console.time("dashboard-overview-resolve-schema");
     let table: string | null;
     let availableColumns: Set<string>;
+    let introspectedColumns: string[];
+    let missingMinimumColumns: string[];
     let schemaMode: DashboardSchemaResolution["schemaMode"];
     let fallbackReason: DashboardSchemaResolution["fallbackReason"];
     try {
-      ({ table, availableColumns, schemaMode, fallbackReason } = await resolveDashboardSchema(supabase));
+      ({ table, availableColumns, introspectedColumns, missingMinimumColumns, schemaMode, fallbackReason } = await resolveDashboardSchema(supabase));
     } finally {
       console.timeEnd("dashboard-overview-resolve-schema");
     }
 
+    const conciseColumns = introspectedColumns.join(",");
+    const missingMinimumColumnsLabel = missingMinimumColumns.join(",") || "none";
+
     if (schemaMode === "static") {
-      const conciseColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column)).join(",");
-      console.info(`dashboard-overview-schema-mode: static (columns=${conciseColumns || "none"})`);
+      console.info(
+        `dashboard-overview-schema-mode: static (table=${DASHBOARD_CANONICAL_TABLE}; columns=${conciseColumns || "none"}; required=${DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES.join(",")}; missing_required=${missingMinimumColumnsLabel})`
+      );
     } else {
-      const resolvedFallbackReason =
-        fallbackReason ?? (table ? "static introspection returned insufficient columns" : "no usable overview columns");
-      console.info(`dashboard-overview-schema-mode: dynamic-fallback (reason=${resolvedFallbackReason})`);
+      const resolvedFallbackReason = fallbackReason ?? (table ? "minimum columns missing" : "no usable overview columns");
+      const resolvedTable = table ?? JOB_TABLE_CANDIDATES.join("|");
+      console.info(
+        `dashboard-overview-schema-mode: dynamic-fallback (reason=${resolvedFallbackReason}; table=${resolvedTable}; columns=${conciseColumns || "none"}; required=${DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES.join(",")}; missing_required=${missingMinimumColumnsLabel})`
+      );
     }
 
     if (!table) {
