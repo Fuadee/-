@@ -5,26 +5,21 @@ import { useEffect, useState } from "react";
 import type { JobRecord } from "@/lib/jobs";
 import DashboardJobList from "./DashboardJobList";
 
-type DashboardSummaryResponse = {
+type DashboardOverviewResponse = {
   summary: {
-    activeCount: number;
-    pendingReviewCount: number;
-    needsFixCount: number;
-    completedCount: number;
+    total: number;
+    pending: number;
+    approved: number;
+    rejected: number;
+    completed: number;
   };
+  jobs: JobRecord[];
   hasUserIdColumn: boolean;
   currentUserId: string | null;
 };
 
-type DashboardJobsResponse = {
-  jobs: JobRecord[];
-};
-
-let summaryRequest: Promise<DashboardSummaryResponse> | null = null;
-let summaryCache: DashboardSummaryResponse | null = null;
-
-let jobsRequest: Promise<DashboardJobsResponse> | null = null;
-let jobsCache: DashboardJobsResponse | null = null;
+let overviewRequest: Promise<DashboardOverviewResponse> | null = null;
+let overviewCache: DashboardOverviewResponse | null = null;
 
 const fetchJson = async <T extends object>(url: string): Promise<T> => {
   const response = await fetch(url, { method: "GET", cache: "no-store" });
@@ -38,73 +33,40 @@ const fetchJson = async <T extends object>(url: string): Promise<T> => {
   return payload as T;
 };
 
-const fetchSummaryDeduped = async () => {
-  if (summaryCache) {
-    return summaryCache;
+const fetchOverviewDeduped = async () => {
+  if (overviewCache) {
+    return overviewCache;
   }
 
-  if (!summaryRequest) {
-    summaryRequest = fetchJson<DashboardSummaryResponse>("/api/dashboard/summary")
+  if (!overviewRequest) {
+    overviewRequest = fetchJson<DashboardOverviewResponse>("/api/dashboard/overview")
       .then((payload) => {
-        summaryCache = payload;
+        overviewCache = payload;
         return payload;
       })
       .finally(() => {
-        summaryRequest = null;
+        overviewRequest = null;
       });
   }
 
-  return summaryRequest;
-};
-
-const fetchJobsDeduped = async () => {
-  if (jobsCache) {
-    return jobsCache;
-  }
-
-  if (!jobsRequest) {
-    jobsRequest = fetchJson<DashboardJobsResponse>("/api/dashboard/jobs")
-      .then((payload) => {
-        jobsCache = payload;
-        return payload;
-      })
-      .finally(() => {
-        jobsRequest = null;
-      });
-  }
-
-  return jobsRequest;
+  return overviewRequest;
 };
 
 export default function DashboardSummary() {
-  const [summaryData, setSummaryData] = useState<DashboardSummaryResponse | null>(summaryCache);
-  const [jobsData, setJobsData] = useState<DashboardJobsResponse | null>(jobsCache);
-  const [isJobsLoading, setIsJobsLoading] = useState(!jobsCache);
+  const [overviewData, setOverviewData] = useState<DashboardOverviewResponse | null>(overviewCache);
+  const [isLoading, setIsLoading] = useState(!overviewCache);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
 
-    async function loadSummary() {
+    async function loadOverview() {
+      setIsLoading(true);
       try {
-        const payload = await fetchSummaryDeduped();
+        const payload = await fetchOverviewDeduped();
 
         if (!isCancelled) {
-          setSummaryData(payload);
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
-        }
-      }
-    }
-
-    async function loadJobs() {
-      setIsJobsLoading(true);
-      try {
-        const payload = await fetchJobsDeduped();
-        if (!isCancelled) {
-          setJobsData(payload);
+          setOverviewData(payload);
         }
       } catch (err) {
         if (!isCancelled) {
@@ -112,13 +74,12 @@ export default function DashboardSummary() {
         }
       } finally {
         if (!isCancelled) {
-          setIsJobsLoading(false);
+          setIsLoading(false);
         }
       }
     }
 
-    void loadSummary();
-    void loadJobs();
+    void loadOverview();
 
     return () => {
       isCancelled = true;
@@ -133,7 +94,7 @@ export default function DashboardSummary() {
     );
   }
 
-  if (!summaryData) {
+  if (!overviewData) {
     return (
       <div className="space-y-4 animate-pulse">
         <div className="grid gap-3 sm:grid-cols-3">
@@ -148,11 +109,16 @@ export default function DashboardSummary() {
 
   return (
     <DashboardJobList
-      jobs={jobsData?.jobs ?? []}
-      initialCounts={summaryData.summary}
-      isInitialJobsLoading={isJobsLoading}
-      hasUserIdColumn={summaryData.hasUserIdColumn}
-      currentUserId={summaryData.currentUserId}
+      jobs={overviewData.jobs}
+      initialCounts={{
+        activeCount: Math.max(overviewData.summary.total - overviewData.summary.completed, 0),
+        pendingReviewCount: overviewData.summary.pending,
+        needsFixCount: overviewData.summary.rejected,
+        completedCount: overviewData.summary.completed
+      }}
+      isInitialJobsLoading={isLoading}
+      hasUserIdColumn={overviewData.hasUserIdColumn}
+      currentUserId={overviewData.currentUserId}
     />
   );
 }
