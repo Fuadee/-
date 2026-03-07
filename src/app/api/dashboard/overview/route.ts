@@ -4,6 +4,8 @@ import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const DASHBOARD_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+const DASHBOARD_CANONICAL_TABLE = "generated_docs";
+const DASHBOARD_CANONICAL_COLUMNS = new Set<string>(DASHBOARD_FIELD_CANDIDATES);
 
 const COMPLETED_STATUSES = ["completed", "ดำเนินการแล้วเสร็จ"] as const;
 const PENDING_STATUSES = ["pending", "pending_review", "pending_approval", "awaiting_payment", "รอตรวจ", "รออนุมัติ", "รอเบิกจ่าย"] as const;
@@ -17,6 +19,20 @@ const isCompletedStatus = (value: unknown): boolean => {
 
   const normalized = value.trim();
   return normalized === "completed" || normalized === "ดำเนินการแล้วเสร็จ";
+};
+
+const shouldUseStaticDashboardSchema = (): boolean =>
+  process.env.NODE_ENV === "production" && process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA !== "true";
+
+const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>) => {
+  if (shouldUseStaticDashboardSchema()) {
+    return {
+      table: DASHBOARD_CANONICAL_TABLE,
+      availableColumns: new Set(DASHBOARD_CANONICAL_COLUMNS)
+    };
+  }
+
+  return resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
 };
 
 export async function GET() {
@@ -42,7 +58,7 @@ export async function GET() {
     let table: string | null;
     let availableColumns: Set<string>;
     try {
-      ({ table, availableColumns } = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES));
+      ({ table, availableColumns } = await resolveDashboardSchema(supabase));
     } finally {
       console.timeEnd("dashboard-overview-resolve-schema");
     }
@@ -74,29 +90,32 @@ export async function GET() {
     let rejected = 0;
     let completed = 0;
     try {
-      const { count: totalCount, error: totalError } = await buildCountQuery();
-      if (totalError) {
-        return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 });
-      }
-      total = totalCount ?? 0;
-
       if (hasStatusColumn) {
-        const [pendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
+        const [totalResult, pendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
+          buildCountQuery(),
           buildCountQuery().in("status", [...PENDING_STATUSES]),
           buildCountQuery().in("status", [...APPROVED_STATUSES]),
           buildCountQuery().in("status", [...REJECTED_STATUSES]),
           buildCountQuery().in("status", [...COMPLETED_STATUSES])
         ]);
 
-        const summaryError = pendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
+        const summaryError =
+          totalResult.error ?? pendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
         if (summaryError) {
           return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 });
         }
 
+        total = totalResult.count ?? 0;
         pending = pendingResult.count ?? 0;
         approved = approvedResult.count ?? 0;
         rejected = rejectedResult.count ?? 0;
         completed = completedResult.count ?? 0;
+      } else {
+        const { count: totalCount, error: totalError } = await buildCountQuery();
+        if (totalError) {
+          return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 });
+        }
+        total = totalCount ?? 0;
       }
     } finally {
       console.timeEnd("dashboard-overview-summary-query");
