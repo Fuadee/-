@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { JOB_TABLE_CANDIDATES, resolveAvailableColumnsForCandidates, resolveJobsSchemaForCandidates } from "@/lib/jobs";
+import { JOB_TABLE_CANDIDATES, resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES = ["id"] as const;
@@ -13,6 +13,8 @@ const DASHBOARD_FIELD_CANDIDATES = [
   ...DASHBOARD_OPTIONAL_TITLE_FIELD_CANDIDATES
 ] as const;
 const DASHBOARD_CANONICAL_TABLE = "generated_docs";
+const DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS = ["id", "created_at", "status", "user_id", "payload", "tax_id", "title"] as const;
+const DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS = 30 * 60 * 1000;
 
 const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
 
@@ -116,18 +118,102 @@ type DashboardSchemaResolution = {
   fallbackReason?: "canonical table unavailable" | "minimum columns missing" | "no usable overview columns" | "static schema disabled";
 };
 
+type StaticColumnsSource = "cache" | "introspect" | "predeclared";
+
+type StaticColumnsCache = {
+  expiresAt: number;
+  availableColumns: Set<string>;
+  source: Exclude<StaticColumnsSource, "cache">;
+};
+
+let staticColumnsCache: StaticColumnsCache | null = null;
+
 const getMissingColumns = (availableColumns: Set<string>, requiredColumns: readonly string[]): string[] =>
   requiredColumns.filter((column) => !availableColumns.has(column));
 
 const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort((a, b) => a.localeCompare(b));
 
+const hasFreshStaticColumnsCache = (entry: StaticColumnsCache | null): entry is StaticColumnsCache =>
+  Boolean(entry && entry.expiresAt > Date.now());
+
+const readCanonicalGeneratedDocsColumns = async (
+  supabase: ReturnType<typeof createSupabaseServer>
+): Promise<Set<string> | null> => {
+  const { data, error } = await supabase
+    .schema("information_schema")
+    .from("columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", DASHBOARD_CANONICAL_TABLE);
+
+  if (error || !data) {
+    return null;
+  }
+
+  const introspectedColumns = new Set(
+    ((data ?? []) as { column_name: string | null }[])
+      .map((row) => row.column_name)
+      .filter((column): column is string => typeof column === "string")
+  );
+
+  if (introspectedColumns.size === 0) {
+    return new Set();
+  }
+
+  return new Set(
+    DASHBOARD_FIELD_CANDIDATES.filter((column) => introspectedColumns.has(column))
+  );
+};
+
+const resolveStaticGeneratedDocsColumns = async (
+  supabase: ReturnType<typeof createSupabaseServer>
+): Promise<{ availableColumns: Set<string>; source: StaticColumnsSource; cacheHit: boolean }> => {
+  if (hasFreshStaticColumnsCache(staticColumnsCache)) {
+    return {
+      availableColumns: new Set(staticColumnsCache.availableColumns),
+      source: "cache",
+      cacheHit: true
+    };
+  }
+
+  const introspectedColumns = await readCanonicalGeneratedDocsColumns(supabase);
+  if (introspectedColumns && introspectedColumns.size > 0) {
+    staticColumnsCache = {
+      expiresAt: Date.now() + DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS,
+      availableColumns: new Set(introspectedColumns),
+      source: "introspect"
+    };
+    return {
+      availableColumns: new Set(introspectedColumns),
+      source: "introspect",
+      cacheHit: false
+    };
+  }
+
+  const predeclaredColumns = new Set(DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS);
+  staticColumnsCache = {
+    expiresAt: Date.now() + DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS,
+    availableColumns: new Set(predeclaredColumns),
+    source: "predeclared"
+  };
+
+  return {
+    availableColumns: predeclaredColumns,
+    source: "predeclared",
+    cacheHit: false
+  };
+};
+
 const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>): Promise<DashboardSchemaResolution> => {
   const staticSchemaDecision = resolveStaticDashboardSchemaDecision();
 
   if (staticSchemaDecision.enabled) {
-    const canonicalColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
+    const { availableColumns: canonicalColumns, source: staticColumnsSource, cacheHit } = await resolveStaticGeneratedDocsColumns(supabase);
     const missingMinimumColumns = getMissingColumns(canonicalColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
     const introspectedColumns = toSortedColumnList(canonicalColumns);
+
+    console.info(`dashboard-overview-static-columns-cache-${cacheHit ? "hit" : "miss"}`);
+    console.info(`dashboard-overview-static-columns-source: ${staticColumnsSource}`);
 
     if (canonicalColumns.size === 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
