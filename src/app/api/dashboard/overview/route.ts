@@ -65,28 +65,61 @@ const resolveTitleWithFallback = (job: Record<string, unknown>): string => {
   return payloadTitle ?? DASHBOARD_FALLBACK_TITLE;
 };
 
-const resolveCanonicalDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>) => {
-  const availableColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
-
-  if (availableColumns.size === 0 || !availableColumns.has("id")) {
-    return null;
-  }
-
-  return {
-    table: DASHBOARD_CANONICAL_TABLE,
-    availableColumns
-  };
+type DashboardSchemaResolution = {
+  table: string | null;
+  availableColumns: Set<string>;
+  schemaMode: "static" | "dynamic-fallback";
+  fallbackReason?: "canonical table unavailable" | "id column missing" | "no usable overview columns" | "static introspection returned insufficient columns";
 };
 
-const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>) => {
+const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>): Promise<DashboardSchemaResolution> => {
   if (shouldUseStaticDashboardSchema()) {
-    const canonicalSchema = await resolveCanonicalDashboardSchema(supabase);
-    if (canonicalSchema) {
-      return canonicalSchema;
+    const canonicalColumns = await resolveAvailableColumnsForCandidates(supabase, DASHBOARD_CANONICAL_TABLE, DASHBOARD_FIELD_CANDIDATES);
+
+    if (canonicalColumns.size === 0) {
+      const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+      return {
+        ...fallbackSchema,
+        schemaMode: "dynamic-fallback",
+        fallbackReason: "canonical table unavailable"
+      };
     }
+
+    if (!canonicalColumns.has("id")) {
+      const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+      return {
+        ...fallbackSchema,
+        schemaMode: "dynamic-fallback",
+        fallbackReason: "id column missing"
+      };
+    }
+
+    const canonicalSchema = {
+      table: DASHBOARD_CANONICAL_TABLE,
+      availableColumns: canonicalColumns
+    };
+
+    if (canonicalSchema) {
+      return {
+        ...canonicalSchema,
+        schemaMode: "static"
+      };
+    }
+
+    const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+    return {
+      ...fallbackSchema,
+      schemaMode: "dynamic-fallback",
+      fallbackReason: "static introspection returned insufficient columns"
+    };
   }
 
-  return resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+  const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+  return {
+    ...fallbackSchema,
+    schemaMode: "dynamic-fallback",
+    fallbackReason: "static introspection returned insufficient columns"
+  };
 };
 
 export async function GET() {
@@ -111,10 +144,21 @@ export async function GET() {
     console.time("dashboard-overview-resolve-schema");
     let table: string | null;
     let availableColumns: Set<string>;
+    let schemaMode: DashboardSchemaResolution["schemaMode"];
+    let fallbackReason: DashboardSchemaResolution["fallbackReason"];
     try {
-      ({ table, availableColumns } = await resolveDashboardSchema(supabase));
+      ({ table, availableColumns, schemaMode, fallbackReason } = await resolveDashboardSchema(supabase));
     } finally {
       console.timeEnd("dashboard-overview-resolve-schema");
+    }
+
+    if (schemaMode === "static") {
+      const conciseColumns = DASHBOARD_FIELD_CANDIDATES.filter((column) => availableColumns.has(column)).join(",");
+      console.info(`dashboard-overview-schema-mode: static (columns=${conciseColumns || "none"})`);
+    } else {
+      const resolvedFallbackReason =
+        fallbackReason ?? (table ? "static introspection returned insufficient columns" : "no usable overview columns");
+      console.info(`dashboard-overview-schema-mode: dynamic-fallback (reason=${resolvedFallbackReason})`);
     }
 
     if (!table) {
