@@ -48,6 +48,7 @@ type JobResponse = {
 
 type PaymentMethod = "" | "credit" | "advance" | "loan";
 type SubmissionMode = "main" | "precheck";
+type RenderedSubmitMode = "default" | "precheck_revision" | "review_revision" | "legacy_needs_fix";
 
 type ValidationErrors = {
   department?: string;
@@ -194,6 +195,8 @@ const readThaiBaht = (value: number): string => {
 const PRECHECK_DEBUG_PREFIX = "[precheck-line][client]";
 const GEN_DOCX_ENDPOINT = "/api/gen-docx";
 const NEEDS_FIX_STATUS = "needs_fix";
+const PRECHECK_PENDING_STATUS = "precheck_pending";
+const PENDING_REVIEW_STATUS = "pending_review";
 
 const getRevisionOriginNotice = (returnFromStatus: string): string => {
   if (returnFromStatus === "precheck_pending") {
@@ -246,6 +249,55 @@ export default function GenerateClient() {
   const specTextareasRef = useRef<Array<HTMLTextAreaElement | null>>([]);
   const expandedSpecTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const MAX_SPEC_HEIGHT = 72;
+  const isNeedsFixRevision = editingJobStatus === NEEDS_FIX_STATUS;
+
+  const renderedSubmitMode = useMemo<RenderedSubmitMode>(() => {
+    if (!isNeedsFixRevision) {
+      return "default";
+    }
+
+    if (returnFromStatus === PRECHECK_PENDING_STATUS) {
+      return "precheck_revision";
+    }
+
+    if (returnFromStatus === PENDING_REVIEW_STATUS) {
+      return "review_revision";
+    }
+
+    return "legacy_needs_fix";
+  }, [isNeedsFixRevision, returnFromStatus]);
+
+  const submitUiConfig = useMemo(() => {
+    if (renderedSubmitMode === "precheck_revision") {
+      return {
+        helperText:
+          "งานนี้ถูกส่งกลับจากการตรวจเบื้องต้น เมื่อแก้ไขเสร็จ ระบบจะส่งกลับให้ตรวจสอบเบื้องต้นอีกครั้ง",
+        showLegacyWarning: false,
+        showDefaultButtons: false,
+        singleButtonLabel: "ส่งกลับเพื่อตรวจสอบเบื้องต้นอีกครั้ง",
+        singleButtonMode: "precheck" as SubmissionMode
+      };
+    }
+
+    if (renderedSubmitMode === "review_revision") {
+      return {
+        helperText:
+          "งานนี้ถูกส่งกลับจากการตรวจสอบรอบสุดท้าย เมื่อแก้ไขเสร็จ ระบบจะส่งกลับให้ตรวจสอบอีกครั้ง",
+        showLegacyWarning: false,
+        showDefaultButtons: false,
+        singleButtonLabel: "ส่งกลับให้ตรวจสอบอีกครั้ง",
+        singleButtonMode: "main" as SubmissionMode
+      };
+    }
+
+    return {
+      helperText: "",
+      showLegacyWarning: renderedSubmitMode === "legacy_needs_fix",
+      showDefaultButtons: true,
+      singleButtonLabel: "",
+      singleButtonMode: "main" as SubmissionMode
+    };
+  }, [renderedSubmitMode]);
 
   const resizeSpecTextarea = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -370,6 +422,20 @@ export default function GenerateClient() {
 
     void loadJob();
   }, [editingJobId]);
+
+  useEffect(() => {
+    if (renderedSubmitMode !== "legacy_needs_fix") {
+      return;
+    }
+
+    console.warn("[generate-client] legacy needs_fix without return_from_status", {
+      jobId: editingJobId || null,
+      status: editingJobStatus || null,
+      returnFromStatus: returnFromStatus || null,
+      revisionPhase: revisionPhase || null,
+      revisionCount
+    });
+  }, [editingJobId, editingJobStatus, renderedSubmitMode, returnFromStatus, revisionCount, revisionPhase]);
 
   useEffect(() => {
     specTextareasRef.current.forEach((textarea) => {
@@ -707,6 +773,15 @@ export default function GenerateClient() {
     setSuccessMessage(null);
 
     try {
+      console.info("[generate-client] submit intent", {
+        jobId: editingJobId || null,
+        status: editingJobStatus || null,
+        returnFromStatus: returnFromStatus || null,
+        revisionPhase: revisionPhase || null,
+        renderedSubmitMode,
+        clickedButton: mode
+      });
+
       const payload = {
         department,
         subject,
@@ -1495,23 +1570,50 @@ export default function GenerateClient() {
                 </div>
 
                 <div className={styles.summaryActions}>
-                  <button
-                    type="button"
-                    className={styles.precheckButton}
-                    onClick={() => void handleSubmit("precheck")}
-                    disabled={loading || !vatMode}
-                  >
-                    {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
-                  </button>
-                  <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
-                    {loading ? (
-                      <span className={styles.spinnerWrap}>
-                        <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
-                      </span>
-                    ) : (
-                      "บันทึกและส่งอนุมัติ"
-                    )}
-                  </button>
+                  {submitUiConfig.helperText ? (
+                    <p className={styles.submitHelperText}>{submitUiConfig.helperText}</p>
+                  ) : null}
+                  {submitUiConfig.showLegacyWarning ? (
+                    <p className={styles.submitWarningText}>
+                      งานนี้เป็นข้อมูลเก่าที่ไม่ทราบต้นทางการส่งกลับ โปรดตรวจสอบก่อนส่ง
+                    </p>
+                  ) : null}
+                  {submitUiConfig.showDefaultButtons ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.precheckButton}
+                        onClick={() => void handleSubmit("precheck")}
+                        disabled={loading || !vatMode}
+                      >
+                        {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
+                      </button>
+                      <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
+                        {loading ? (
+                          <span className={styles.spinnerWrap}>
+                            <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
+                          </span>
+                        ) : (
+                          "บันทึกและส่งอนุมัติ"
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.primaryButton}
+                      onClick={() => void handleSubmit(submitUiConfig.singleButtonMode)}
+                      disabled={loading || !vatMode}
+                    >
+                      {loading ? (
+                        <span className={styles.spinnerWrap}>
+                          <span className={styles.spinner} aria-hidden /> กำลังบันทึก...
+                        </span>
+                      ) : (
+                        submitUiConfig.singleButtonLabel
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
