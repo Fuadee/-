@@ -49,17 +49,27 @@ const resolveNextStatusForSubmission = ({
   submissionMode: "main" | "precheck";
   returnFromStatus: string;
   jobId: string;
-}): string => {
+}): { nextStatus: string; bypassPrevented: boolean } => {
+  const requestedNextStatus = resolveDefaultStatusBySubmissionMode(submissionMode);
   if (previousStatus !== "needs_fix") {
-    return resolveDefaultStatusBySubmissionMode(submissionMode);
+    return {
+      nextStatus: requestedNextStatus,
+      bypassPrevented: false
+    };
   }
 
   if (returnFromStatus === PRECHECK_PENDING_STATUS) {
-    return PRECHECK_PENDING_STATUS;
+    return {
+      nextStatus: PRECHECK_PENDING_STATUS,
+      bypassPrevented: requestedNextStatus !== PRECHECK_PENDING_STATUS
+    };
   }
 
   if (returnFromStatus === PENDING_REVIEW_STATUS) {
-    return PENDING_REVIEW_STATUS;
+    return {
+      nextStatus: PENDING_REVIEW_STATUS,
+      bypassPrevented: true
+    };
   }
 
   console.warn("[gen-docx] needs_fix without return_from_status; fallback to submissionMode (legacy data)", {
@@ -68,7 +78,10 @@ const resolveNextStatusForSubmission = ({
     submissionMode,
     returnFromStatus: returnFromStatus || null
   });
-  return resolveDefaultStatusBySubmissionMode(submissionMode);
+  return {
+    nextStatus: requestedNextStatus,
+    bypassPrevented: false
+  };
 };
 
 const resolveAssigneeNameFromJobOrPayload = (job: JobRecord | null, payload: unknown): string => {
@@ -137,7 +150,9 @@ type UpsertResult = {
   shouldSendPrecheckLine: boolean;
   operation: "create" | "update";
   previousStatus: string | null;
+  returnFromStatus: string | null;
   nextStatus: string | null;
+  bypassPrevented: boolean;
   shouldSendPrecheckLineReason: string;
 };
 
@@ -155,7 +170,9 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       shouldSendPrecheckLine: false,
       operation: jobId ? "update" : "create",
       previousStatus: null,
+      returnFromStatus: null,
       nextStatus: null,
+      bypassPrevented: false,
       shouldSendPrecheckLineReason: "jobs table not found"
     };
   }
@@ -186,7 +203,7 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     const previousStatus = previousStatusRow?.status?.trim() ?? "";
     const returnFromStatus = previousStatusRow?.return_from_status?.trim() ?? "";
     const revisionPhase = previousStatusRow?.revision_phase?.trim() ?? "";
-    const nextStatus = resolveNextStatusForSubmission({
+    const { nextStatus, bypassPrevented } = resolveNextStatusForSubmission({
       previousStatus,
       submissionMode,
       returnFromStatus,
@@ -212,10 +229,11 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     console.info("[gen-docx] resolved submission transition", {
       jobId,
       previousStatus: previousStatus || null,
-      submissionMode,
+      requestedSubmissionMode: submissionMode,
       returnFromStatus: returnFromStatus || null,
       revisionPhase: revisionPhase || null,
       resolvedNextStatus: nextStatus,
+      bypassPrevented,
       source: "edit"
     });
 
@@ -235,7 +253,9 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       shouldSendPrecheckLine,
       operation: "update",
       previousStatus: previousStatus || null,
+      returnFromStatus: returnFromStatus || null,
       nextStatus,
+      bypassPrevented,
       shouldSendPrecheckLineReason
     };
   }
@@ -251,7 +271,9 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       shouldSendPrecheckLine: false,
       operation: "create",
       previousStatus: null,
+      returnFromStatus: null,
       nextStatus: null,
+      bypassPrevented: false,
       shouldSendPrecheckLineReason: "empty write data"
     };
   }
@@ -266,10 +288,11 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   console.info("[gen-docx] resolved submission transition", {
     jobId: created?.id ? String(created.id) : null,
     previousStatus: null,
-    submissionMode,
+    requestedSubmissionMode: submissionMode,
     returnFromStatus: null,
     revisionPhase: null,
     resolvedNextStatus: defaultNextStatus,
+    bypassPrevented: false,
     source: "new"
   });
 
@@ -279,7 +302,9 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     shouldSendPrecheckLine: submissionMode === "precheck",
     operation: "create",
     previousStatus: null,
+    returnFromStatus: null,
     nextStatus: defaultNextStatus,
+    bypassPrevented: false,
     shouldSendPrecheckLineReason:
       submissionMode === "precheck" ? "new precheck job" : "submissionMode is not precheck"
   };
@@ -305,15 +330,19 @@ export async function POST(request: NextRequest) {
       shouldSendPrecheckLine,
       operation,
       previousStatus,
+      returnFromStatus,
       nextStatus,
+      bypassPrevented,
       shouldSendPrecheckLineReason
     } = await upsertJobRecord(body, jobId, submissionMode);
 
     console.info(`${PRECHECK_DEBUG_PREFIX} upsert result`, {
       operation,
-      submissionMode,
+      requestedSubmissionMode: submissionMode,
       previousStatus,
+      returnFromStatus,
       nextStatus,
+      bypassPrevented,
       shouldSendPrecheckLine,
       shouldSendPrecheckLineReason,
       createdJobId: createdJobId ?? null
