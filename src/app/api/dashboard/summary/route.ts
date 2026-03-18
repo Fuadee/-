@@ -93,10 +93,10 @@ export async function GET() {
 
       activeCount += 1;
       const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
-      if (normalizedStatus === "pending_review") {
+      if (normalizedStatus === "pending_review" || normalizedStatus === "review_pending" || normalizedStatus === "รอตรวจสอบ") {
         pendingReviewCount += 1;
       }
-      if (normalizedStatus === "needs_fix") {
+      if (normalizedStatus === "needs_fix" || normalizedStatus === "revision_requested" || normalizedStatus === "รอแก้ไข") {
         needsFixCount += 1;
       }
     }
