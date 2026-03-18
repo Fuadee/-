@@ -718,7 +718,9 @@ export default function GenerateClient() {
         }))
       };
 
-      const requestBody = editingJobId ? { ...payload, jobId: editingJobId, submissionMode: mode } : { ...payload, submissionMode: mode };
+      const requestBody: typeof payload & { submissionMode: SubmissionMode; jobId?: string } = editingJobId
+        ? { ...payload, jobId: editingJobId, submissionMode: mode }
+        : { ...payload, submissionMode: mode };
 
       if (mode === "precheck") {
         console.info(`${PRECHECK_DEBUG_PREFIX} sending request`, {
