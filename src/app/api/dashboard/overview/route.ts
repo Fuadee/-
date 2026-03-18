@@ -15,6 +15,7 @@ const DASHBOARD_FIELD_CANDIDATES = [
 const DASHBOARD_CANONICAL_TABLE = "generated_docs";
 const DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS = ["id", "created_at", "status", "user_id", "payload", "tax_id", "title"] as const;
 const DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS = 30 * 60 * 1000;
+const DASHBOARD_STATIC_PROBE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
 
@@ -96,10 +97,16 @@ const asNonEmptyString = (value: unknown): string | null => {
   return trimmed ? trimmed : null;
 };
 
-const resolveTitleWithFallback = (job: Record<string, unknown>): string => {
+const resolveTitleWithFallbackMetadata = (
+  job: Record<string, unknown>
+): { title: string; usedPayloadFallback: boolean; usedDefaultFallback: boolean } => {
   const directTitle = asNonEmptyString(job.title) ?? asNonEmptyString(job.case_title) ?? asNonEmptyString(job.name);
   if (directTitle) {
-    return directTitle;
+    return {
+      title: directTitle,
+      usedPayloadFallback: false,
+      usedDefaultFallback: false
+    };
   }
 
   const payload = parsePayload(job.payload);
@@ -109,7 +116,19 @@ const resolveTitleWithFallback = (job: Record<string, unknown>): string => {
     asNonEmptyString(payload?.name) ??
     asNonEmptyString(payload?.subject_detail);
 
-  return payloadTitle ?? DASHBOARD_FALLBACK_TITLE;
+  if (payloadTitle) {
+    return {
+      title: payloadTitle,
+      usedPayloadFallback: true,
+      usedDefaultFallback: false
+    };
+  }
+
+  return {
+    title: DASHBOARD_FALLBACK_TITLE,
+    usedPayloadFallback: true,
+    usedDefaultFallback: true
+  };
 };
 
 type DashboardSchemaResolution = {
@@ -130,7 +149,13 @@ type StaticColumnsCache = {
   source: Exclude<StaticColumnsSource, "cache">;
 };
 
+type StaticProbeCache = {
+  expiresAt: number;
+  result: { canUse: boolean; reason: string };
+};
+
 let staticColumnsCache: StaticColumnsCache | null = null;
+let staticProbeCache: StaticProbeCache | null = null;
 
 const getMissingColumns = (availableColumns: Set<string>, requiredColumns: readonly string[]): string[] =>
   requiredColumns.filter((column) => !availableColumns.has(column));
@@ -138,6 +163,8 @@ const getMissingColumns = (availableColumns: Set<string>, requiredColumns: reado
 const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort((a, b) => a.localeCompare(b));
 
 const hasFreshStaticColumnsCache = (entry: StaticColumnsCache | null): entry is StaticColumnsCache =>
+  Boolean(entry && entry.expiresAt > Date.now());
+const hasFreshStaticProbeCache = (entry: StaticProbeCache | null): entry is StaticProbeCache =>
   Boolean(entry && entry.expiresAt > Date.now());
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
@@ -261,7 +288,19 @@ const resolveDashboardSchema = async (
     const predeclaredColumns = new Set(DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS);
     if (options.staticShortCircuitEnabled) {
       const staticProbeStart = performance.now();
-      const staticProbeResult = await canUsePredeclaredStaticColumns(supabase, predeclaredColumns);
+      let staticProbeResult: { canUse: boolean; reason: string };
+      if (hasFreshStaticProbeCache(staticProbeCache)) {
+        console.info("dashboard-overview-schema-static-probe-cache-hit");
+        staticProbeResult = staticProbeCache.result;
+        console.info(`dashboard-overview-schema-static-probe-skipped: cached-result (${staticProbeResult.reason})`);
+      } else {
+        console.info("dashboard-overview-schema-static-probe-cache-miss");
+        staticProbeResult = await canUsePredeclaredStaticColumns(supabase, predeclaredColumns);
+        staticProbeCache = {
+          expiresAt: Date.now() + DASHBOARD_STATIC_PROBE_CACHE_TTL_MS,
+          result: staticProbeResult
+        };
+      }
       console.info(`dashboard-overview-schema-static-probe-end: ${formatDurationMs(performance.now() - staticProbeStart)}`);
 
       if (staticProbeResult.canUse) {
@@ -515,12 +554,36 @@ export async function GET() {
         return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsError.message}` }, { status: 500 });
       }
 
+      let jobsUsingPayloadFallback = 0;
+      let jobsUsingDefaultTitleFallback = 0;
+      let jobsWithDirectTitle = 0;
       jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[])
         .filter((job) => !isCompletedStatus(job.status))
-        .map((job) => ({
-          ...job,
-          title: resolveTitleWithFallback(job)
-        }));
+        .map((job) => {
+          const titleResolution = resolveTitleWithFallbackMetadata(job);
+          if (titleResolution.usedPayloadFallback) {
+            jobsUsingPayloadFallback += 1;
+          } else {
+            jobsWithDirectTitle += 1;
+          }
+          if (titleResolution.usedDefaultFallback) {
+            jobsUsingDefaultTitleFallback += 1;
+          }
+          return {
+            ...job,
+            title: titleResolution.title
+          };
+        });
+      const payloadRetentionReason =
+        jobsUsingPayloadFallback > 0
+          ? "payload-title-fallback-rows-present"
+          : "no-payload-fallback-needed-but-retained-for-response-compat";
+      console.info(
+        `dashboard-overview-jobs-title-fallback-stats: total_rows=${jobs.length}; direct_title_rows=${jobsWithDirectTitle}; payload_fallback_rows=${jobsUsingPayloadFallback}; default_title_rows=${jobsUsingDefaultTitleFallback}`
+      );
+      if (availableColumns.has("payload")) {
+        console.info(`dashboard-overview-jobs-payload-retention-reason: ${payloadRetentionReason}`);
+      }
     } finally {
       console.info(`dashboard-overview-jobs-query-end: ${formatDurationMs(performance.now() - jobsStart)}`);
     }
