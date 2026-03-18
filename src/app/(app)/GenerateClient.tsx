@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Maximize2 } from "lucide-react";
 import {
@@ -47,6 +47,7 @@ type JobResponse = {
 };
 
 type PaymentMethod = "" | "credit" | "advance" | "loan";
+type SubmissionMode = "main" | "precheck";
 
 type ValidationErrors = {
   department?: string;
@@ -215,6 +216,7 @@ export default function GenerateClient() {
   const [loading, setLoading] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
@@ -680,8 +682,7 @@ export default function GenerateClient() {
     return Array.from(new Set([...basicFields, ...missingItemFields]));
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async (mode: SubmissionMode = "main") => {
     const errors = validateForm();
     const missingSpecs = getMissingSpecRows(items);
     setValidationErrors(errors);
@@ -706,6 +707,7 @@ export default function GenerateClient() {
 
     setLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
       const payload = {
@@ -738,7 +740,7 @@ export default function GenerateClient() {
         }))
       };
 
-      const requestBody = editingJobId ? { ...payload, jobId: editingJobId } : payload;
+      const requestBody = editingJobId ? { ...payload, jobId: editingJobId, submissionMode: mode } : { ...payload, submissionMode: mode };
 
       const response = await fetch("/api/gen-docx", {
         method: "POST",
@@ -764,6 +766,16 @@ export default function GenerateClient() {
         throw new Error(`${message}${properties}`);
       }
 
+      if (mode === "precheck") {
+        const precheckPayload = (await response.json().catch(() => null)) as { jobId?: string } | null;
+        const createdJobId = precheckPayload?.jobId ?? null;
+        setSuccessMessage("บันทึกงานและส่งรอตรวจเบื้องต้นแล้ว");
+        router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
+        return;
+      }
+
+      const createdJobId = response.headers.get("x-job-id");
+
       const blob = await response.blob();
       const contentDisposition = response.headers.get("Content-Disposition");
       const fallbackName = `หนังสือราชการ_${new Date().toISOString().slice(0, 10)}.docx`;
@@ -778,8 +790,6 @@ export default function GenerateClient() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-
-      const createdJobId = response.headers.get("x-job-id");
       router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
     } catch (submitError) {
       const message =
@@ -853,7 +863,13 @@ export default function GenerateClient() {
 
         {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
 
-        <form onSubmit={handleSubmit} className={styles.layout}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit("main");
+          }}
+          className={styles.layout}
+        >
           <div className={styles.mainColumn}>
             <section className={styles.card}>
               <h2 className={styles.sectionTitle}>ข้อมูลเรื่อง</h2>
@@ -1464,13 +1480,21 @@ export default function GenerateClient() {
                 </div>
 
                 <div className={styles.summaryActions}>
+                  <button
+                    type="button"
+                    className={styles.precheckButton}
+                    onClick={() => void handleSubmit("precheck")}
+                    disabled={loading || !vatMode}
+                  >
+                    {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
+                  </button>
                   <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
                     {loading ? (
                       <span className={styles.spinnerWrap}>
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                       </span>
                     ) : (
-                      editingJobId ? "บันทึกและสร้างเอกสารใหม่" : "บันทึกและสร้างเอกสารใหม่"
+                      editingJobId ? "บันทึกและส่งอนุมัติ" : "บันทึกและส่งอนุมัติ"
                     )}
                   </button>
                   <button type="button" className={styles.resetButton} onClick={resetForm}>
@@ -1480,6 +1504,7 @@ export default function GenerateClient() {
               </div>
 
               {error && <pre className={styles.error}>{error}</pre>}
+              {successMessage ? <p className={styles.success}>{successMessage}</p> : null}
             </section>
           </div>
         </form>

@@ -470,6 +470,25 @@
   box-shadow: 0 12px 26px rgba(232, 121, 249, 0.26);
 }
 
+.precheckButton {
+  width: 100%;
+  color: #854d0e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  box-shadow: 0 8px 16px rgba(245, 158, 11, 0.16);
+}
+
+.precheckButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px rgba(245, 158, 11, 0.2);
+  background: #fef3c7;
+}
+
+.precheckButton:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .primaryButton:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 16px 30px rgba(232, 121, 249, 0.32);
@@ -511,6 +530,16 @@
   font-size: 0.85rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.success {
+  margin-top: 14px;
+  color: #166534;
+  font-size: 0.9rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 @media (max-width: 1024px) {

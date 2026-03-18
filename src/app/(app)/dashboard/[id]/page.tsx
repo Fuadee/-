@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getJobFileUrl, getJobTitle, resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
+import DashboardPrecheckActions from "./DashboardPrecheckActions";
 
 const formatDate = (value: unknown) => {
   if (typeof value !== "string" || !value) {
@@ -62,6 +63,7 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
   }
 
   const fileUrl = getJobFileUrl(job);
+  const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
 
   return (
     <section className="mx-auto max-w-4xl px-4 py-8">
@@ -94,6 +96,8 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
             </a>
           </div>
         ) : null}
+
+        {normalizedStatus === "precheck_pending" ? <DashboardPrecheckActions jobId={String(job.id ?? params.id)} /> : null}
       </div>
     </section>
   );

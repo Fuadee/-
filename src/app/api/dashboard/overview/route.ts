@@ -19,6 +19,7 @@ const DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS = 30 * 60 * 1000;
 const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
 
 const COMPLETED_STATUSES = ["completed", "ดำเนินการแล้วเสร็จ"] as const;
+const PRECHECK_PENDING_STATUSES = ["precheck_pending"] as const;
 const PENDING_STATUSES = ["pending", "pending_review", "pending_approval", "awaiting_payment", "รอตรวจ", "รออนุมัติ", "รอเบิกจ่าย"] as const;
 const APPROVED_STATUSES = ["approved", "อนุมัติ", "อนุมัติแล้ว"] as const;
 const REJECTED_STATUSES = ["rejected", "needs_fix", "ไม่อนุมัติ", "รอการแก้ไข"] as const;
@@ -433,6 +434,7 @@ export async function GET() {
     const summaryStart = performance.now();
     let total = 0;
     let pending = 0;
+    let precheckPending = 0;
     let approved = 0;
     let rejected = 0;
     let completed = 0;
@@ -461,26 +463,36 @@ export async function GET() {
         }
 
         if (!summaryResolvedByRpc) {
-          const [totalResult, pendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
+          const [totalResult, pendingResult, precheckPendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
             buildCountQuery(),
             buildCountQuery().in("status", [...PENDING_STATUSES]),
+            buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]),
             buildCountQuery().in("status", [...APPROVED_STATUSES]),
             buildCountQuery().in("status", [...REJECTED_STATUSES]),
             buildCountQuery().in("status", [...COMPLETED_STATUSES])
           ]);
 
           const summaryError =
-            totalResult.error ?? pendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
+            totalResult.error ?? pendingResult.error ?? precheckPendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
           if (summaryError) {
             return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 });
           }
 
           total = totalResult.count ?? 0;
           pending = pendingResult.count ?? 0;
+          precheckPending = precheckPendingResult.count ?? 0;
           approved = approvedResult.count ?? 0;
           rejected = rejectedResult.count ?? 0;
           completed = completedResult.count ?? 0;
           console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
+        }
+
+        if (summaryResolvedByRpc) {
+          const { count: precheckCount, error: precheckError } = await buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]);
+          if (precheckError) {
+            return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${precheckError.message}` }, { status: 500 });
+          }
+          precheckPending = precheckCount ?? 0;
         }
       } else {
         console.info("dashboard-overview-summary-status-column-missing: total-only");
@@ -532,6 +544,7 @@ export async function GET() {
         summary: {
           total,
           pending,
+          precheckPending,
           approved,
           rejected,
           completed
