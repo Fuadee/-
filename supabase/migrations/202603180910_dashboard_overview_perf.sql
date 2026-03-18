@@ -1,3 +1,4 @@
+-- function: aggregated dashboard summary on canonical table
 create or replace function public.dashboard_overview_summary(p_user_id uuid)
 returns table (
   total bigint,
@@ -19,20 +20,34 @@ as $$
   where user_id = p_user_id;
 $$;
 
+-- grants: allow API roles to execute summary function
 grant execute on function public.dashboard_overview_summary(uuid) to anon, authenticated, service_role;
 
-create index if not exists idx_generated_docs_user_id on public.generated_docs (user_id);
-create index if not exists idx_generated_docs_user_id_status on public.generated_docs (user_id, status);
-create index if not exists idx_generated_docs_user_id_created_at_desc on public.generated_docs (user_id, created_at desc);
+-- defensive indexes: create only when candidate tables exist
+do $$
+begin
+  if to_regclass('public.generated_docs') is not null then
+    execute 'create index if not exists idx_generated_docs_user_id on public.generated_docs (user_id)';
+    execute 'create index if not exists idx_generated_docs_user_id_status on public.generated_docs (user_id, status)';
+    execute 'create index if not exists idx_generated_docs_user_id_created_at_desc on public.generated_docs (user_id, created_at desc)';
+  end if;
 
-create index if not exists idx_doc_jobs_user_id on public.doc_jobs (user_id);
-create index if not exists idx_doc_jobs_user_id_status on public.doc_jobs (user_id, status);
-create index if not exists idx_doc_jobs_user_id_created_at_desc on public.doc_jobs (user_id, created_at desc);
+  if to_regclass('public.doc_jobs') is not null then
+    execute 'create index if not exists idx_doc_jobs_user_id on public.doc_jobs (user_id)';
+    execute 'create index if not exists idx_doc_jobs_user_id_status on public.doc_jobs (user_id, status)';
+    execute 'create index if not exists idx_doc_jobs_user_id_created_at_desc on public.doc_jobs (user_id, created_at desc)';
+  end if;
 
-create index if not exists idx_documents_user_id on public.documents (user_id);
-create index if not exists idx_documents_user_id_status on public.documents (user_id, status);
-create index if not exists idx_documents_user_id_created_at_desc on public.documents (user_id, created_at desc);
+  if to_regclass('public.documents') is not null then
+    execute 'create index if not exists idx_documents_user_id on public.documents (user_id)';
+    execute 'create index if not exists idx_documents_user_id_status on public.documents (user_id, status)';
+    execute 'create index if not exists idx_documents_user_id_created_at_desc on public.documents (user_id, created_at desc)';
+  end if;
 
-create index if not exists idx_jobs_user_id on public.jobs (user_id);
-create index if not exists idx_jobs_user_id_status on public.jobs (user_id, status);
-create index if not exists idx_jobs_user_id_created_at_desc on public.jobs (user_id, created_at desc);
+  if to_regclass('public.jobs') is not null then
+    execute 'create index if not exists idx_jobs_user_id on public.jobs (user_id)';
+    execute 'create index if not exists idx_jobs_user_id_status on public.jobs (user_id, status)';
+    execute 'create index if not exists idx_jobs_user_id_created_at_desc on public.jobs (user_id, created_at desc)';
+  end if;
+end
+$$;
