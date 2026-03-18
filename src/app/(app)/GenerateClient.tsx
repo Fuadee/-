@@ -1246,9 +1246,6 @@ export default function GenerateClient() {
                     VAT: {vatModeLabel}
                   </span>
                 </div>
-                {/* <button type="button" className={styles.secondaryButton} onClick={addItem}>
-                  + เพิ่มรายการ
-                </button> */}
               </div>
 
               <div className={`${styles.vatSelectorCard} ${shouldShowVatModeError ? styles.vatSelectorCardError : ""}`}>
@@ -1463,7 +1460,7 @@ export default function GenerateClient() {
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                       </span>
                     ) : (
-                      editingJobId ? "บันทึกและส่งอนุมัติ" : "บันทึกและส่งอนุมัติ"
+                      "บันทึกและส่งอนุมัติ"
                     )}
                   </button>
                 </div>
