@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { sendLineGroupNotification } from "@/lib/line";
-import { buildPrecheckApprovedLineMessage, resolveRequesterProfile } from "@/lib/lineNotifications";
+import {
+  buildNeedsFixReturnedToPrecheckLineMessage,
+  buildPrecheckApprovedLineMessage,
+  resolveRequesterProfile
+} from "@/lib/lineNotifications";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { calculateVatBreakdown, type VatMode } from "@/lib/vat";
@@ -520,6 +524,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     previousStatusNormalized === PRECHECK_PENDING_STATUS &&
     MAIN_PROCESS_STATUSES.has(nextStatusNormalized) &&
     previousStatusNormalized !== nextStatusNormalized;
+  const shouldSendNeedsFixReturnedToPrecheckLine =
+    previousStatusNormalized === NEEDS_FIX_STATUS &&
+    returnFromStatusBefore.toLowerCase() === PRECHECK_PENDING_STATUS &&
+    nextStatusNormalized === PRECHECK_PENDING_STATUS;
 
   const updates: Record<string, unknown> = { status: nextStatus };
   if (normalizedCurrentStatus === NEEDS_FIX_STATUS && normalizedNextStatus !== NEEDS_FIX_STATUS) {
@@ -593,6 +601,34 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         previousStatus: existingJob.status,
         nextStatus
       });
+    }
+  }
+
+  if (shouldSendNeedsFixReturnedToPrecheckLine) {
+    const updatedStatusNormalized = asTrimmedString(job.status).toLowerCase();
+    if (updatedStatusNormalized === PRECHECK_PENDING_STATUS) {
+      const assigneeNameFromJob = getAssigneeDisplayNameFromJob(job);
+      const assigneeNameById = await tryResolveNameById(supabase, resolveAssigneeId(job));
+      const origin = getOriginFromRequest(request);
+      const jobUrl = `${origin}/dashboard/${encodeURIComponent(String(job.id ?? params.id))}`;
+      const lineMessage = buildNeedsFixReturnedToPrecheckLineMessage({
+        payload: job.payload ?? existingJob.payload ?? {},
+        assigneeName: assigneeNameFromJob || assigneeNameById,
+        returnedAt: new Date(),
+        jobUrl
+      });
+
+      try {
+        await sendLineGroupNotification(lineMessage);
+      } catch (lineError) {
+        console.error("Unable to send LINE needs-fix-returned-to-precheck notification:", {
+          error: lineError,
+          jobId: params.id,
+          previousStatus: existingJob.status,
+          returnFromStatusBefore,
+          nextStatus
+        });
+      }
     }
   }
 

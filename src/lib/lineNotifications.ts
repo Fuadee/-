@@ -232,3 +232,27 @@ export const buildPrecheckApprovedLineMessage = (input: {
     `🔗 ${input.jobUrl}`
   ].join("\n");
 };
+
+export const buildNeedsFixReturnedToPrecheckLineMessage = (input: {
+  payload: unknown;
+  assigneeName?: string;
+  returnedAt: Date;
+  jobUrl: string;
+}): string => {
+  const jobTitle = resolveJobTitle(input.payload);
+  const assigneeDisplayName = resolvePrecheckAssigneeDisplayName({
+    payload: input.payload,
+    assigneeName: input.assigneeName
+  });
+  const returnedAtThai = formatThaiDateTimeWithWeekdayBE(input.returnedAt);
+
+  return [
+    "🔁 มีงานแก้ไขส่งกลับมาตรวจเบื้องต้นอีกครั้ง",
+    "",
+    `งาน: ${jobTitle}`,
+    `ผู้รับมอบหมาย: ${assigneeDisplayName}`,
+    "สถานะ: แก้ไขแล้ว รอตรวจเบื้องต้นอีกครั้ง",
+    `เวลา: ${returnedAtThai}`,
+    `ลิงก์ตรวจงาน: ${input.jobUrl}`
+  ].join("\n");
+};
