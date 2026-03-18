@@ -13,6 +13,7 @@ type StatusActionDialogProps = {
   vendorName: string;
   taxId: string;
   grandTotal: number | null;
+  returnFromStatus: string;
   isSaving: boolean;
   isPaymentProcessing: boolean;
   errorMessage: string | null;
@@ -152,6 +153,7 @@ export default function StatusActionDialog({
   vendorName,
   taxId,
   grandTotal,
+  returnFromStatus,
   isSaving,
   isPaymentProcessing,
   errorMessage,
@@ -162,6 +164,13 @@ export default function StatusActionDialog({
   onRequestNeedsFix,
   onMarkPaymentDone
 }: StatusActionDialogProps) {
+  const resolvedNeedsFixReturnStatus: EffectiveStatus =
+    returnFromStatus === "precheck_pending"
+      ? "precheck_pending"
+      : returnFromStatus === "pending_review"
+        ? "pending_review"
+        : "pending_review";
+
   if (!open) {
     return null;
   }
@@ -334,7 +343,7 @@ export default function StatusActionDialog({
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("pending_review")}
+                onClick={() => onUpdateStatus(resolvedNeedsFixReturnStatus)}
                 disabled={isSaving}
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >

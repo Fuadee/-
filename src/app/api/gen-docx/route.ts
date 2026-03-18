@@ -20,6 +20,7 @@ type GenerateRequestBody = GeneratePayload & {
 
 const PRECHECK_DEBUG_PREFIX = "[precheck-line]";
 const PRECHECK_PENDING_STATUS = "precheck_pending";
+const PENDING_REVIEW_STATUS = "pending_review";
 const PENDING_APPROVAL_STATUS = "pending_approval";
 
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
@@ -34,6 +35,41 @@ const asTrimmedString = (value: unknown): string => (typeof value === "string" ?
 
 const parsePayload = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const resolveDefaultStatusBySubmissionMode = (submissionMode: "main" | "precheck") =>
+  submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS;
+
+const resolveNextStatusForSubmission = ({
+  previousStatus,
+  submissionMode,
+  returnFromStatus,
+  jobId
+}: {
+  previousStatus: string;
+  submissionMode: "main" | "precheck";
+  returnFromStatus: string;
+  jobId: string;
+}): string => {
+  if (previousStatus !== "needs_fix") {
+    return resolveDefaultStatusBySubmissionMode(submissionMode);
+  }
+
+  if (returnFromStatus === PRECHECK_PENDING_STATUS) {
+    return PRECHECK_PENDING_STATUS;
+  }
+
+  if (returnFromStatus === PENDING_REVIEW_STATUS) {
+    return PENDING_REVIEW_STATUS;
+  }
+
+  console.warn("[gen-docx] needs_fix without return_from_status; fallback to submissionMode (legacy data)", {
+    jobId,
+    previousStatus,
+    submissionMode,
+    returnFromStatus: returnFromStatus || null
+  });
+  return resolveDefaultStatusBySubmissionMode(submissionMode);
+};
 
 const resolveAssigneeNameFromJobOrPayload = (job: JobRecord | null, payload: unknown): string => {
   const parsedPayload = parsePayload(payload);
@@ -71,7 +107,7 @@ const getOriginFromRequest = (request: NextRequest): string => {
   return origin.replace(/\/$/, "");
 };
 
-const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>, submissionMode: "main" | "precheck") => {
+const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>, nextStatus: string) => {
   const writeData: Record<string, unknown> = {};
 
   if (availableColumns.has("title")) writeData.title = deriveTitle(body);
@@ -88,7 +124,7 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   if (availableColumns.has("loan_doc_no")) {
     writeData.loan_doc_no = toNullableTrimmedString(body.loan_doc_no);
   }
-  if (availableColumns.has("status")) writeData.status = submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS;
+  if (availableColumns.has("status")) writeData.status = nextStatus;
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();
 
@@ -125,7 +161,8 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   }
 
   const availableColumns = await resolveAvailableColumns(supabase, table);
-  const writeData = buildPersistedData(body, availableColumns, submissionMode);
+  const defaultNextStatus = resolveDefaultStatusBySubmissionMode(submissionMode);
+  const writeData = buildPersistedData(body, availableColumns, defaultNextStatus);
 
   if (jobId) {
     let updateQuery = supabase.from(table).update(writeData).eq("id", jobId);
@@ -134,13 +171,36 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       updateQuery = updateQuery.eq("user_id", user.id);
     }
 
-    let previousStatusQuery = supabase.from(table).select("status").eq("id", jobId).limit(1);
+    const statusSelectColumns = ["status", "return_from_status", "revision_phase"]
+      .filter((column) => availableColumns.has(column))
+      .join(",");
+
+    let previousStatusQuery = supabase.from(table).select(statusSelectColumns || "status").eq("id", jobId).limit(1);
     if (user && availableColumns.has("user_id")) {
       previousStatusQuery = previousStatusQuery.eq("user_id", user.id);
     }
     const previousStatusResult = await previousStatusQuery;
-    const previousStatus = ((previousStatusResult.data ?? [])[0] as { status?: string } | undefined)?.status?.trim() ?? "";
-    const nextStatus = submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS;
+    const previousStatusRow = ((previousStatusResult.data ?? [])[0] ?? null) as
+      | { status?: string; return_from_status?: string; revision_phase?: string }
+      | null;
+    const previousStatus = previousStatusRow?.status?.trim() ?? "";
+    const returnFromStatus = previousStatusRow?.return_from_status?.trim() ?? "";
+    const revisionPhase = previousStatusRow?.revision_phase?.trim() ?? "";
+    const nextStatus = resolveNextStatusForSubmission({
+      previousStatus,
+      submissionMode,
+      returnFromStatus,
+      jobId
+    });
+    writeData.status = nextStatus;
+    if (previousStatus === "needs_fix") {
+      if (availableColumns.has("return_from_status")) {
+        writeData.return_from_status = null;
+      }
+      if (availableColumns.has("revision_phase")) {
+        writeData.revision_phase = null;
+      }
+    }
     const shouldSendPrecheckLine = submissionMode === "precheck" && previousStatus !== PRECHECK_PENDING_STATUS;
     const shouldSendPrecheckLineReason =
       submissionMode !== "precheck"
@@ -148,6 +208,16 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
         : previousStatus === PRECHECK_PENDING_STATUS
           ? "previous status already precheck_pending"
           : "precheck update and previous status is not precheck_pending";
+
+    console.info("[gen-docx] resolved submission transition", {
+      jobId,
+      previousStatus: previousStatus || null,
+      submissionMode,
+      returnFromStatus: returnFromStatus || null,
+      revisionPhase: revisionPhase || null,
+      resolvedNextStatus: nextStatus,
+      source: "edit"
+    });
 
     const { data, error } = await updateQuery.select("*").limit(1);
     if (error) {
@@ -193,13 +263,23 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
 
   const created = ((data ?? [])[0] ?? null) as JobRecord | null;
 
+  console.info("[gen-docx] resolved submission transition", {
+    jobId: created?.id ? String(created.id) : null,
+    previousStatus: null,
+    submissionMode,
+    returnFromStatus: null,
+    revisionPhase: null,
+    resolvedNextStatus: defaultNextStatus,
+    source: "new"
+  });
+
   return {
     jobId: created?.id ? String(created.id) : null,
     job: created,
     shouldSendPrecheckLine: submissionMode === "precheck",
     operation: "create",
     previousStatus: null,
-    nextStatus: submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS,
+    nextStatus: defaultNextStatus,
     shouldSendPrecheckLineReason:
       submissionMode === "precheck" ? "new precheck job" : "submissionMode is not precheck"
   };
