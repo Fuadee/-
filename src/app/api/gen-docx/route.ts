@@ -20,6 +20,7 @@ type GenerateRequestBody = GeneratePayload & {
 
 const PRECHECK_DEBUG_PREFIX = "[precheck-line]";
 const PRECHECK_PENDING_STATUS = "precheck_pending";
+const DOCUMENT_PENDING_STATUS = "document_pending";
 const PENDING_REVIEW_STATUS = "pending_review";
 const PENDING_APPROVAL_STATUS = "pending_approval";
 
@@ -52,6 +53,13 @@ const resolveNextStatusForSubmission = ({
 }): { nextStatus: string; bypassPrevented: boolean } => {
   const requestedNextStatus = resolveDefaultStatusBySubmissionMode(submissionMode);
   if (previousStatus !== "needs_fix") {
+    if (previousStatus === DOCUMENT_PENDING_STATUS) {
+      return {
+        nextStatus: PENDING_APPROVAL_STATUS,
+        bypassPrevented: requestedNextStatus !== PENDING_APPROVAL_STATUS
+      };
+    }
+
     return {
       nextStatus: requestedNextStatus,
       bypassPrevented: false

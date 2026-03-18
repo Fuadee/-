@@ -48,7 +48,13 @@ type JobResponse = {
 
 type PaymentMethod = "" | "credit" | "advance" | "loan";
 type SubmissionMode = "main" | "precheck";
-type RenderedSubmitMode = "default" | "precheck_revision" | "review_revision" | "legacy_needs_fix";
+type WorkflowMode =
+  | "initial"
+  | "waiting_precheck"
+  | "ready_for_main"
+  | "precheck_revision"
+  | "review_revision"
+  | "legacy_revision";
 
 type ValidationErrors = {
   department?: string;
@@ -196,6 +202,7 @@ const PRECHECK_DEBUG_PREFIX = "[precheck-line][client]";
 const GEN_DOCX_ENDPOINT = "/api/gen-docx";
 const NEEDS_FIX_STATUS = "needs_fix";
 const PRECHECK_PENDING_STATUS = "precheck_pending";
+const DOCUMENT_PENDING_STATUS = "document_pending";
 const PENDING_REVIEW_STATUS = "pending_review";
 
 const getRevisionOriginNotice = (returnFromStatus: string): string => {
@@ -249,11 +256,17 @@ export default function GenerateClient() {
   const specTextareasRef = useRef<Array<HTMLTextAreaElement | null>>([]);
   const expandedSpecTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const MAX_SPEC_HEIGHT = 72;
-  const isNeedsFixRevision = editingJobStatus === NEEDS_FIX_STATUS;
+  const renderedWorkflowMode = useMemo<WorkflowMode>(() => {
+    if (editingJobStatus === PRECHECK_PENDING_STATUS) {
+      return "waiting_precheck";
+    }
 
-  const renderedSubmitMode = useMemo<RenderedSubmitMode>(() => {
-    if (!isNeedsFixRevision) {
-      return "default";
+    if (editingJobStatus === DOCUMENT_PENDING_STATUS) {
+      return "ready_for_main";
+    }
+
+    if (editingJobStatus !== NEEDS_FIX_STATUS) {
+      return "initial";
     }
 
     if (returnFromStatus === PRECHECK_PENDING_STATUS) {
@@ -264,40 +277,101 @@ export default function GenerateClient() {
       return "review_revision";
     }
 
-    return "legacy_needs_fix";
-  }, [isNeedsFixRevision, returnFromStatus]);
+    return "legacy_revision";
+  }, [editingJobStatus, returnFromStatus]);
 
   const submitUiConfig = useMemo(() => {
-    if (renderedSubmitMode === "precheck_revision") {
+    if (renderedWorkflowMode === "waiting_precheck") {
       return {
-        helperText:
-          "งานนี้ถูกส่งกลับจากการตรวจเบื้องต้น เมื่อแก้ไขเสร็จ ระบบจะส่งกลับให้ตรวจสอบเบื้องต้นอีกครั้ง",
+        noticeTone: "info" as const,
+        noticeTitle: "กำลังรอการตรวจสอบเบื้องต้น",
+        noticeBody: "งานนี้ถูกส่งให้ผู้ตรวจสอบแล้ว กรุณารอผลการตรวจ",
+        helperText: "",
         showLegacyWarning: false,
         showDefaultButtons: false,
+        showSingleButton: false,
+        singleButtonLabel: "",
+        singleButtonMode: "main" as SubmissionMode
+      };
+    }
+
+    if (renderedWorkflowMode === "ready_for_main") {
+      return {
+        noticeTone: "success" as const,
+        noticeTitle: "งานนี้ผ่านการตรวจสอบเบื้องต้นแล้ว",
+        noticeBody: "สามารถบันทึกและส่งอนุมัติได้",
+        helperText: "",
+        showLegacyWarning: false,
+        showDefaultButtons: false,
+        showSingleButton: true,
+        singleButtonLabel: "บันทึกและส่งอนุมัติ",
+        singleButtonMode: "main" as SubmissionMode
+      };
+    }
+
+    if (renderedWorkflowMode === "precheck_revision") {
+      return {
+        noticeTone: "warning" as const,
+        noticeTitle: "งานนี้ถูกส่งกลับจากการตรวจสอบเบื้องต้น",
+        noticeBody: "เมื่อแก้ไขเสร็จ ให้ส่งกลับเพื่อตรวจสอบอีกครั้ง",
+        helperText: "",
+        showLegacyWarning: false,
+        showDefaultButtons: false,
+        showSingleButton: true,
         singleButtonLabel: "ส่งกลับเพื่อตรวจสอบเบื้องต้นอีกครั้ง",
         singleButtonMode: "precheck" as SubmissionMode
       };
     }
 
-    if (renderedSubmitMode === "review_revision") {
+    if (renderedWorkflowMode === "review_revision") {
       return {
-        helperText:
-          "งานนี้ถูกส่งกลับจากการตรวจสอบรอบสุดท้าย เมื่อแก้ไขเสร็จ ระบบจะส่งกลับให้ตรวจสอบอีกครั้ง",
+        noticeTone: "warning" as const,
+        noticeTitle: "งานนี้ถูกส่งกลับจากการตรวจสอบรอบสุดท้าย",
+        noticeBody: "เมื่อแก้ไขเสร็จ ให้ส่งกลับให้ตรวจสอบอีกครั้ง",
+        helperText: "",
         showLegacyWarning: false,
         showDefaultButtons: false,
+        showSingleButton: true,
         singleButtonLabel: "ส่งกลับให้ตรวจสอบอีกครั้ง",
         singleButtonMode: "main" as SubmissionMode
       };
     }
 
     return {
+      noticeTone: null,
+      noticeTitle: "",
+      noticeBody: "",
       helperText: "",
-      showLegacyWarning: renderedSubmitMode === "legacy_needs_fix",
+      showLegacyWarning: renderedWorkflowMode === "legacy_revision",
       showDefaultButtons: true,
+      showSingleButton: false,
       singleButtonLabel: "",
       singleButtonMode: "main" as SubmissionMode
     };
-  }, [renderedSubmitMode]);
+  }, [renderedWorkflowMode]);
+
+  const canSubmitMode = useCallback(
+    (mode: SubmissionMode): boolean => {
+      if (renderedWorkflowMode === "waiting_precheck") {
+        return false;
+      }
+
+      if (renderedWorkflowMode === "ready_for_main") {
+        return mode === "main";
+      }
+
+      if (renderedWorkflowMode === "precheck_revision") {
+        return mode === "precheck";
+      }
+
+      if (renderedWorkflowMode === "review_revision") {
+        return mode === "main";
+      }
+
+      return true;
+    },
+    [renderedWorkflowMode]
+  );
 
   const resizeSpecTextarea = useCallback((textarea: HTMLTextAreaElement) => {
     textarea.style.height = "auto";
@@ -424,7 +498,7 @@ export default function GenerateClient() {
   }, [editingJobId]);
 
   useEffect(() => {
-    if (renderedSubmitMode !== "legacy_needs_fix") {
+    if (renderedWorkflowMode !== "legacy_revision") {
       return;
     }
 
@@ -435,7 +509,7 @@ export default function GenerateClient() {
       revisionPhase: revisionPhase || null,
       revisionCount
     });
-  }, [editingJobId, editingJobStatus, renderedSubmitMode, returnFromStatus, revisionCount, revisionPhase]);
+  }, [editingJobId, editingJobStatus, renderedWorkflowMode, returnFromStatus, revisionCount, revisionPhase]);
 
   useEffect(() => {
     specTextareasRef.current.forEach((textarea) => {
@@ -740,6 +814,18 @@ export default function GenerateClient() {
   };
 
   const handleSubmit = async (mode: SubmissionMode = "main") => {
+    if (!canSubmitMode(mode)) {
+      console.warn("[generate-client] blocked submit by workflow mode", {
+        jobId: editingJobId || null,
+        status: editingJobStatus || null,
+        returnFromStatus: returnFromStatus || null,
+        revisionPhase: revisionPhase || null,
+        renderedWorkflowMode,
+        clickedButton: mode
+      });
+      return;
+    }
+
     if (mode === "precheck") {
       console.info(`${PRECHECK_DEBUG_PREFIX} precheck button clicked`, {
         mode
@@ -778,7 +864,7 @@ export default function GenerateClient() {
         status: editingJobStatus || null,
         returnFromStatus: returnFromStatus || null,
         revisionPhase: revisionPhase || null,
-        renderedSubmitMode,
+        renderedWorkflowMode,
         clickedButton: mode
       });
 
@@ -946,7 +1032,7 @@ export default function GenerateClient() {
         </div>
 
         {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
-        {editingJobId && editingJobStatus === NEEDS_FIX_STATUS ? (
+          {editingJobId && editingJobStatus === NEEDS_FIX_STATUS ? (
           <div className={styles.revisionNotice}>
             <p className={styles.revisionNoticeTitle}>{getRevisionOriginNotice(returnFromStatus)}</p>
             <p className={styles.revisionNoticeMeta}>
@@ -959,7 +1045,9 @@ export default function GenerateClient() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void handleSubmit("main");
+            if (canSubmitMode("main")) {
+              void handleSubmit("main");
+            }
           }}
           className={styles.layout}
         >
@@ -1570,6 +1658,20 @@ export default function GenerateClient() {
                 </div>
 
                 <div className={styles.summaryActions}>
+                  {submitUiConfig.noticeTitle ? (
+                    <div
+                      className={`${styles.workflowNotice} ${
+                        submitUiConfig.noticeTone === "success"
+                          ? styles.workflowNoticeSuccess
+                          : submitUiConfig.noticeTone === "warning"
+                            ? styles.workflowNoticeWarning
+                            : styles.workflowNoticeInfo
+                      }`}
+                    >
+                      <p className={styles.workflowNoticeTitle}>{submitUiConfig.noticeTitle}</p>
+                      <p className={styles.workflowNoticeBody}>{submitUiConfig.noticeBody}</p>
+                    </div>
+                  ) : null}
                   {submitUiConfig.helperText ? (
                     <p className={styles.submitHelperText}>{submitUiConfig.helperText}</p>
                   ) : null}
@@ -1598,7 +1700,8 @@ export default function GenerateClient() {
                         )}
                       </button>
                     </>
-                  ) : (
+                  ) : null}
+                  {submitUiConfig.showSingleButton ? (
                     <button
                       type="button"
                       className={styles.primaryButton}
@@ -1613,7 +1716,7 @@ export default function GenerateClient() {
                         submitUiConfig.singleButtonLabel
                       )}
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
