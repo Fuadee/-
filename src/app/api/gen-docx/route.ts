@@ -18,6 +18,8 @@ type GenerateRequestBody = GeneratePayload & {
   submissionMode?: "main" | "precheck";
 };
 
+const PRECHECK_DEBUG_PREFIX = "[precheck-line]";
+
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
 
 const toNullableTrimmedString = (value: string | null | undefined) => {
@@ -70,6 +72,10 @@ type UpsertResult = {
   jobId: string | null;
   job: JobRecord | null;
   shouldSendPrecheckLine: boolean;
+  operation: "create" | "update";
+  previousStatus: string | null;
+  nextStatus: string | null;
+  shouldSendPrecheckLineReason: string;
 };
 
 async function upsertJobRecord(body: GeneratePayload, jobId?: string, submissionMode: "main" | "precheck" = "main"): Promise<UpsertResult> {
@@ -80,7 +86,15 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
 
   const table = await resolveJobsTable(supabase);
   if (!table) {
-    return { jobId: null, job: null, shouldSendPrecheckLine: false };
+    return {
+      jobId: null,
+      job: null,
+      shouldSendPrecheckLine: false,
+      operation: jobId ? "update" : "create",
+      previousStatus: null,
+      nextStatus: null,
+      shouldSendPrecheckLineReason: "jobs table not found"
+    };
   }
 
   const availableColumns = await resolveAvailableColumns(supabase, table);
@@ -99,6 +113,14 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     }
     const previousStatusResult = await previousStatusQuery;
     const previousStatus = ((previousStatusResult.data ?? [])[0] as { status?: string } | undefined)?.status?.trim() ?? "";
+    const nextStatus = submissionMode === "precheck" ? "precheck_pending" : "generated";
+    const shouldSendPrecheckLine = submissionMode === "precheck" && previousStatus !== "precheck_pending";
+    const shouldSendPrecheckLineReason =
+      submissionMode !== "precheck"
+        ? "submissionMode is not precheck"
+        : previousStatus === "precheck_pending"
+          ? "previous status already precheck_pending"
+          : "precheck update and previous status is not precheck_pending";
 
     const { data, error } = await updateQuery.select("*").limit(1);
     if (error) {
@@ -113,7 +135,11 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     return {
       jobId: String(updated.id),
       job: updated,
-      shouldSendPrecheckLine: submissionMode === "precheck" && previousStatus !== "precheck_pending"
+      shouldSendPrecheckLine,
+      operation: "update",
+      previousStatus: previousStatus || null,
+      nextStatus,
+      shouldSendPrecheckLineReason
     };
   }
 
@@ -122,7 +148,15 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   }
 
   if (Object.keys(writeData).length === 0) {
-    return { jobId: null, job: null, shouldSendPrecheckLine: false };
+    return {
+      jobId: null,
+      job: null,
+      shouldSendPrecheckLine: false,
+      operation: "create",
+      previousStatus: null,
+      nextStatus: null,
+      shouldSendPrecheckLineReason: "empty write data"
+    };
   }
 
   const { data, error } = await supabase.from(table).insert(writeData).select("*").limit(1);
@@ -135,18 +169,76 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   return {
     jobId: created?.id ? String(created.id) : null,
     job: created,
-    shouldSendPrecheckLine: submissionMode === "precheck"
+    shouldSendPrecheckLine: submissionMode === "precheck",
+    operation: "create",
+    previousStatus: null,
+    nextStatus: submissionMode === "precheck" ? "precheck_pending" : "generated",
+    shouldSendPrecheckLineReason:
+      submissionMode === "precheck" ? "new precheck job" : "submissionMode is not precheck"
   };
 }
 
 export async function POST(request: NextRequest) {
   try {
+    console.info(`${PRECHECK_DEBUG_PREFIX} route entered`, {
+      method: request.method,
+      path: request.nextUrl.pathname
+    });
+
     const requestBody = (await request.json()) as GenerateRequestBody;
     const { jobId, submissionMode = "main", ...body } = requestBody;
+    console.info(`${PRECHECK_DEBUG_PREFIX} parsed request body`, {
+      submissionMode,
+      jobId: jobId ?? null
+    });
 
-    const { jobId: createdJobId, job: savedJob, shouldSendPrecheckLine } = await upsertJobRecord(body, jobId, submissionMode);
+    const {
+      jobId: createdJobId,
+      job: savedJob,
+      shouldSendPrecheckLine,
+      operation,
+      previousStatus,
+      nextStatus,
+      shouldSendPrecheckLineReason
+    } = await upsertJobRecord(body, jobId, submissionMode);
 
-    if (submissionMode === "precheck" && shouldSendPrecheckLine && savedJob) {
+    console.info(`${PRECHECK_DEBUG_PREFIX} upsert result`, {
+      operation,
+      submissionMode,
+      previousStatus,
+      nextStatus,
+      shouldSendPrecheckLine,
+      shouldSendPrecheckLineReason,
+      createdJobId: createdJobId ?? null
+    });
+
+    const missingLineEnv =
+      !asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN) || !asTrimmedString(process.env.LINE_GROUP_ID);
+
+    if (missingLineEnv) {
+      console.warn(`${PRECHECK_DEBUG_PREFIX} missing LINE env`, {
+        hasLineChannelAccessToken: Boolean(asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN)),
+        hasLineGroupId: Boolean(asTrimmedString(process.env.LINE_GROUP_ID))
+      });
+    }
+
+    if (submissionMode !== "precheck") {
+      console.info(`${PRECHECK_DEBUG_PREFIX} skip LINE`, {
+        reason: "submissionMode is not precheck"
+      });
+    } else if (!shouldSendPrecheckLine) {
+      console.info(`${PRECHECK_DEBUG_PREFIX} skip LINE`, {
+        reason: shouldSendPrecheckLineReason
+      });
+    } else if (!savedJob) {
+      console.info(`${PRECHECK_DEBUG_PREFIX} skip LINE`, {
+        reason: "saved job not found after upsert"
+      });
+    } else if (missingLineEnv) {
+      console.info(`${PRECHECK_DEBUG_PREFIX} skip LINE`, {
+        reason: "missing LINE env"
+      });
+    } else {
       const supabase = createSupabaseServer();
       const {
         data: { user }
@@ -167,13 +259,17 @@ export async function POST(request: NextRequest) {
       });
 
       try {
+        console.info(`${PRECHECK_DEBUG_PREFIX} sendLineGroupNotification called`, {
+          jobId: resolvedJobId
+        });
         await sendLineGroupNotification(lineMessage);
-        console.info("LINE precheck_pending notification sent", {
+        console.info(`${PRECHECK_DEBUG_PREFIX} LINE success`, {
           jobId: resolvedJobId
         });
       } catch (lineError) {
-        console.error("Unable to send LINE precheck_pending notification", {
+        console.error(`${PRECHECK_DEBUG_PREFIX} LINE error`, {
           jobId: resolvedJobId,
+          message: lineError instanceof Error ? lineError.message : String(lineError),
           error: lineError
         });
       }
