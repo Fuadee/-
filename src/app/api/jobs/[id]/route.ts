@@ -89,7 +89,19 @@ const PAYMENT_DONE_STATUS = "ดำเนินการแล้วเสร็
 
 const NEEDS_FIX_STATUS = "needs_fix";
 const PRECHECK_PENDING_STATUS = "precheck_pending";
-const MAIN_PROCESS_STATUSES = new Set(["main_process", "pending_approval"]);
+const DOCUMENT_PENDING_STATUS = "document_pending";
+const MAIN_PROCESS_STATUSES = new Set(["main_process", DOCUMENT_PENDING_STATUS, "pending_approval"]);
+const ALLOWED_STATUS_UPDATES = new Set([
+  PRECHECK_PENDING_STATUS,
+  DOCUMENT_PENDING_STATUS,
+  "pending_approval",
+  "pending_review",
+  "awaiting_payment",
+  NEEDS_FIX_STATUS,
+  "completed",
+  "paid",
+  PAYMENT_DONE_STATUS
+]);
 
 const formatThaiDateTime = (date: Date): string => {
   const datePart = new Intl.DateTimeFormat("th-TH", {
@@ -415,6 +427,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (!nextStatus) {
     return NextResponse.json({ message: "กรุณาระบุสถานะที่ต้องการอัปเดต" }, { status: 400 });
+  }
+  if (!ALLOWED_STATUS_UPDATES.has(nextStatus)) {
+    return NextResponse.json({ message: `ไม่รองรับสถานะ ${nextStatus}` }, { status: 400 });
   }
 
   const previousStatusNormalized = asTrimmedString(existingJob.status).toLowerCase();

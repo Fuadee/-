@@ -85,7 +85,14 @@ const normalizeStatus = (value: unknown): EffectiveStatus => {
     return "completed";
   }
 
-  if (trimmed === "pending_review" || trimmed === "awaiting_payment" || trimmed === "needs_fix" || trimmed === "pending_approval" || trimmed === "completed") {
+  if (
+    trimmed === "pending_review" ||
+    trimmed === "awaiting_payment" ||
+    trimmed === "needs_fix" ||
+    trimmed === "pending_approval" ||
+    trimmed === "document_pending" ||
+    trimmed === "completed"
+  ) {
     return trimmed;
   }
 
@@ -151,6 +158,7 @@ const getGrandTotal = (itemsValue: unknown): number | null => {
 const getStatusLabel = (status: EffectiveStatus): string =>
   ({
     precheck_pending: "รอตรวจเบื้องต้น",
+    document_pending: "รอสร้างเอกสาร",
     pending_approval: "รออนุมัติ",
     pending_review: "รอตรวจ",
     awaiting_payment: "รอเบิกจ่าย",
@@ -160,6 +168,7 @@ const getStatusLabel = (status: EffectiveStatus): string =>
 
 const statusClassName: Record<EffectiveStatus, string> = {
   precheck_pending: "border-yellow-200 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 focus-visible:ring-yellow-300",
+  document_pending: "border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus-visible:ring-indigo-300",
   pending_approval: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
   pending_review: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
   awaiting_payment: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 focus-visible:ring-emerald-300",
@@ -704,13 +713,13 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
                           href={`/?job=${encodeURIComponent(id)}`}
                           className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
                         >
-                          {status === "precheck_pending" ? "ดูรายละเอียด" : "แก้ไขงานนี้ →"}
+                          {status === "precheck_pending" ? "ดูรายละเอียด" : status === "document_pending" ? "สร้างเอกสาร" : "แก้ไขงานนี้ →"}
                         </Link>
                         <Link
                           href={`/dashboard/${encodeURIComponent(id)}`}
                           className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                         >
-                          {status === "precheck_pending" ? "เปิดหน้างาน" : "ดูรายละเอียด"}
+                          {status === "precheck_pending" ? "เปิดหน้างาน" : status === "document_pending" ? "รายละเอียดงาน" : "ดูรายละเอียด"}
                         </Link>
                       </>
                     )}
@@ -744,6 +753,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
 
       <StatusActionDialog
         open={Boolean(dialog)}
+        jobId={dialog?.id ?? ""}
         jobTitle={dialog?.title ?? ""}
         status={dialog?.status ?? "pending_approval"}
         detailsText={dialog?.detailsText ?? ""}

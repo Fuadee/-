@@ -226,7 +226,8 @@ export const buildPrecheckApprovedLineMessage = (input: {
     `💰 วงเงิน: ${netTotal} บาท`,
     `⏰ เวลา: ${approvedAtThai}`,
     "",
-    "✅ สามารถนำเสนอเพื่ออนุมัติต่อไป",
+    "📝 พร้อมเข้าสู่ขั้นสร้างเอกสาร",
+    "✅ เมื่อสร้างเอกสารเสร็จแล้ว ระบบจะเข้าสู่รออนุมัติ",
     "",
     `🔗 ${input.jobUrl}`
   ].join("\n");

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type EffectiveStatus = "precheck_pending" | "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
+type EffectiveStatus = "precheck_pending" | "document_pending" | "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
 
 type StatusActionDialogProps = {
   open: boolean;
+  jobId: string;
   jobTitle: string;
   status: EffectiveStatus;
   detailsText: string;
@@ -144,6 +145,7 @@ export type { EffectiveStatus };
 
 export default function StatusActionDialog({
   open,
+  jobId,
   jobTitle,
   status,
   detailsText,
@@ -240,12 +242,36 @@ export default function StatusActionDialog({
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("pending_approval")}
+                onClick={() => onUpdateStatus("document_pending")}
                 disabled={isSaving}
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? "กำลังบันทึก..." : "ส่งเข้ากระบวนการหลัก"}
               </button>
+            </div>
+          </>
+        ) : null}
+
+        {status === "document_pending" ? (
+          <>
+            <h2 className="text-lg font-semibold text-slate-900">รอสร้างเอกสาร</h2>
+            <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
+            <p className="mt-4 text-sm text-slate-700">งานนี้ผ่านการตรวจเบื้องต้นแล้ว ขั้นตอนถัดไปคือสร้างเอกสารให้เสร็จก่อน จึงจะเข้าสู่สถานะรออนุมัติ</p>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                ปิด
+              </button>
+              <a
+                href={`/?job=${encodeURIComponent(jobId)}`}
+                className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
+                สร้างเอกสาร
+              </a>
             </div>
           </>
         ) : null}
