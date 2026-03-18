@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { buildDocxTemplateData, type GeneratePayload } from "@/lib/docxTemplateData";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { sendLineGroupNotification } from "@/lib/line";
-import { buildPrecheckPendingLineMessage, resolveRequesterName } from "@/lib/lineNotifications";
+import { buildPrecheckPendingLineMessage, resolveRequesterProfile } from "@/lib/lineNotifications";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -29,6 +29,31 @@ const toNullableTrimmedString = (value: string | null | undefined) => {
 
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+
+const parsePayload = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+const resolveAssigneeNameFromJobOrPayload = (job: JobRecord | null, payload: unknown): string => {
+  const parsedPayload = parsePayload(payload);
+
+  return (
+    asTrimmedString(parsedPayload.assignee) ||
+    asTrimmedString(job?.assignee) ||
+    asTrimmedString(parsedPayload.assignee_name) ||
+    asTrimmedString(job?.assignee_name) ||
+    asTrimmedString(parsedPayload.assigned_to_name) ||
+    asTrimmedString(job?.assigned_to_name) ||
+    asTrimmedString(parsedPayload.assignedToName) ||
+    asTrimmedString(parsedPayload.receiver_name) ||
+    asTrimmedString(job?.receiver_name) ||
+    asTrimmedString(parsedPayload.recipient_name) ||
+    asTrimmedString(job?.recipient_name) ||
+    asTrimmedString(parsedPayload.delegate_name) ||
+    asTrimmedString(job?.delegate_name) ||
+    asTrimmedString(parsedPayload.owner_name) ||
+    asTrimmedString(job?.owner_name)
+  );
+};
 
 const getOriginFromRequest = (request: NextRequest): string => {
   const envBaseUrl =
@@ -243,6 +268,7 @@ export async function POST(request: NextRequest) {
       const {
         data: { user }
       } = await supabase.auth.getUser();
+      const requesterProfile = resolveRequesterProfile(user);
 
       const origin = getOriginFromRequest(request);
       const resolvedJobId = createdJobId ?? String(savedJob.id ?? "").trim();
@@ -250,10 +276,15 @@ export async function POST(request: NextRequest) {
 
       const createdAtRaw = typeof savedJob.created_at === "string" ? savedJob.created_at : null;
       const createdAt = createdAtRaw ? new Date(createdAtRaw) : new Date();
+      const payloadForLine = savedJob.payload ?? body;
+      const assigneeName = resolveAssigneeNameFromJobOrPayload(savedJob, payloadForLine);
 
       const lineMessage = buildPrecheckPendingLineMessage({
-        payload: savedJob.payload ?? body,
-        requesterName: resolveRequesterName(user),
+        payload: payloadForLine,
+        assigneeName,
+        requesterName: requesterProfile.requesterName,
+        requesterDisplayName: requesterProfile.requesterDisplayName,
+        requesterEmail: requesterProfile.requesterEmail,
         createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
         jobUrl
       });
