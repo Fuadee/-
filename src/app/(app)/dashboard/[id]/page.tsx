@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getJobFileUrl, getJobTitle, resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
+import { formatThaiDateTimeWithWeekdayBE } from "@/lib/lineNotifications";
 
 const formatDate = (value: unknown) => {
   if (typeof value !== "string" || !value) {
@@ -14,10 +15,7 @@ const formatDate = (value: unknown) => {
     return value;
   }
 
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "full",
-    timeStyle: "short"
-  }).format(date);
+  return formatThaiDateTimeWithWeekdayBE(date);
 };
 
 const renderField = (label: string, value: unknown) => (
@@ -80,9 +78,9 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
             {normalizedStatus === "precheck_pending" ? (
               <Link
                 href={`/?job=${encodeURIComponent(String(job.id ?? params.id))}`}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(147,51,234,0.35)] transition hover:brightness-105"
               >
-                แก้ไขงานนี้
+                ตรวจสอบงานนี้
               </Link>
             ) : null}
             <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
