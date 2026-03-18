@@ -423,37 +423,6 @@ export default function GenerateClient() {
     [isItemUsed]
   );
 
-  const resetForm = () => {
-    const isConfirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?");
-    if (!isConfirmed) {
-      return;
-    }
-
-    setDepartment("");
-    setSubject("");
-    setSubjectDetail("");
-    setPurpose("");
-    setBudgetAmount("");
-    setVendorName("");
-    setTaxId("");
-    setVendorAddress("");
-    setReceiptNo("");
-    setReceiptDate("");
-    setAssignee("");
-    setAssigneePosition("");
-    setApprovedBy("");
-    setPaymentMethod("");
-    setAssigneeEmpCode("");
-    setLoanDocNo("");
-    setPaymentBudget(createEmptyPaymentBudgetForm());
-    setItems([createEmptyItem()]);
-    setVatMode(null);
-    setError(null);
-    setValidationErrors({});
-    setShowMissingSpecModal(false);
-    setMissingSpecRows([]);
-  };
-
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
   const vatSummary = useMemo(() => {
     return items.reduce(
@@ -1496,9 +1465,6 @@ export default function GenerateClient() {
                     ) : (
                       editingJobId ? "บันทึกและส่งอนุมัติ" : "บันทึกและส่งอนุมัติ"
                     )}
-                  </button>
-                  <button type="button" className={styles.resetButton} onClick={resetForm}>
-                    ล้างข้อมูล
                   </button>
                 </div>
               </div>
