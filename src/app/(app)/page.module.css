@@ -463,6 +463,42 @@
   align-content: start;
 }
 
+.workflowNotice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+
+.workflowNoticeInfo {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.workflowNoticeSuccess {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.workflowNoticeWarning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.workflowNoticeTitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.workflowNoticeBody {
+  margin: 4px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #334155;
+}
+
 .submitHelperText {
   margin: 0;
   padding: 10px 12px;
