@@ -23,6 +23,9 @@ const COLUMN_PROBE_CANDIDATES = [
   "revision_note",
   "revision_requested_at",
   "revision_requested_by",
+  "return_from_status",
+  "revision_phase",
+  "revision_count",
   "assignee_id",
   "assignee_name",
   "updated_at"
@@ -141,6 +144,9 @@ export type JobRecord = Record<string, unknown> & {
   revision_note?: string | null;
   revision_requested_at?: string | null;
   revision_requested_by?: string | null;
+  return_from_status?: string | null;
+  revision_phase?: string | null;
+  revision_count?: number | null;
   assignee_id?: string | null;
   assignee_name?: string | null;
 };

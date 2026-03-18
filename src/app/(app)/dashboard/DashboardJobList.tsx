@@ -33,6 +33,7 @@ type DialogState = {
   id: string;
   title: string;
   status: EffectiveStatus;
+  returnFromStatus: string;
   detailsText: string;
   vendorName: string;
   taxId: string;
@@ -333,6 +334,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
       id,
       title,
       status,
+      returnFromStatus: asTrimmedString(job.return_from_status),
       detailsText: asTrimmedString(payload.subject_detail),
       vendorName: asTrimmedString(payload.vendor_name),
       taxId: asTrimmedString(payload.tax_id) || asTrimmedString(job.tax_id),
@@ -427,7 +429,23 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
         return;
       }
 
-      setItems((prev) => prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "needs_fix", revision_note: trimmedNote } : item)));
+      const payload = (await response.json().catch(() => null)) as { job?: JobRecord } | null;
+      const updatedJob = payload?.job ?? null;
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === needsFixDialog.id
+            ? {
+                ...item,
+                status: "needs_fix",
+                revision_note: trimmedNote,
+                return_from_status:
+                  typeof updatedJob?.return_from_status === "string"
+                    ? updatedJob.return_from_status
+                    : item.return_from_status
+              }
+            : item
+        )
+      );
       setNeedsFixDialog(null);
       setDialog(null);
       setRevisionNote("");
@@ -756,6 +774,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
         jobId={dialog?.id ?? ""}
         jobTitle={dialog?.title ?? ""}
         status={dialog?.status ?? "pending_approval"}
+        returnFromStatus={dialog?.returnFromStatus ?? ""}
         detailsText={dialog?.detailsText ?? ""}
         vendorName={dialog?.vendorName ?? ""}
         taxId={dialog?.taxId ?? ""}
