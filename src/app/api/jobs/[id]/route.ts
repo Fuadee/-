@@ -86,7 +86,19 @@ const formatAmount = (value: number | null): string =>
 
 const PAYMENT_DONE_STATUS = "ดำเนินการแล้วเสร็จ";
 
-const NEEDS_FIX_STATUS = "needs_fix";
+const REVISION_REQUESTED_STATUS = "revision_requested";
+const LEGACY_NEEDS_FIX_STATUS = "needs_fix";
+const ALLOWED_PATCH_STATUSES = new Set([
+  "pending",
+  "pending_approval",
+  "review_pending",
+  "pending_review",
+  "revision_requested",
+  "needs_fix",
+  "awaiting_payment",
+  "completed",
+  "paid"
+]);
 
 const formatThaiDateTime = (date: Date): string => {
   const datePart = new Intl.DateTimeFormat("th-TH", {
@@ -351,7 +363,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ job });
   }
 
-  if (nextStatus === NEEDS_FIX_STATUS) {
+  if (nextStatus === REVISION_REQUESTED_STATUS || nextStatus === LEGACY_NEEDS_FIX_STATUS) {
     if (!revisionNote) {
       return NextResponse.json({ message: "กรุณาระบุรายการที่ต้องแก้ไขก่อนส่งกลับ" }, { status: 400 });
     }
@@ -367,7 +379,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const nowIso = new Date().toISOString();
     const updates: Record<string, unknown> = {
-      status: NEEDS_FIX_STATUS,
+      status: REVISION_REQUESTED_STATUS,
       revision_note: revisionNote,
       revision_requested_at: nowIso,
       revision_requested_by: user.id
@@ -414,7 +426,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ message: "กรุณาระบุสถานะที่ต้องการอัปเดต" }, { status: 400 });
   }
 
-  let updateQuery = supabase.from(table).update({ status: nextStatus }).eq("id", params.id).select("*").limit(1);
+  if (!ALLOWED_PATCH_STATUSES.has(nextStatus)) {
+    return NextResponse.json({ message: "สถานะที่ส่งมาไม่ถูกต้อง" }, { status: 400 });
+  }
+
+  const normalizedNextStatus =
+    nextStatus === "pending_approval"
+      ? "pending"
+      : nextStatus === "pending_review"
+        ? "review_pending"
+        : nextStatus === "needs_fix"
+          ? "revision_requested"
+          : nextStatus;
+
+  let updateQuery = supabase.from(table).update({ status: normalizedNextStatus }).eq("id", params.id).select("*").limit(1);
   if (availableColumns.has("user_id")) {
     updateQuery = updateQuery.eq("user_id", user.id);
   }
@@ -429,7 +454,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
   }
 
-  if (nextStatus === "paid") {
+  if (normalizedNextStatus === "paid") {
     try {
       await sendLineGroupNotification(buildPaymentDoneMessage(existingJob, user));
     } catch (lineError) {

@@ -46,6 +46,8 @@ type JobResponse = {
   message?: string;
 };
 
+type SubmitTargetStatus = "pending" | "review_pending";
+
 type PaymentMethod = "" | "credit" | "advance" | "loan";
 
 type ValidationErrors = {
@@ -421,37 +423,6 @@ export default function GenerateClient() {
     [isItemUsed]
   );
 
-  const resetForm = () => {
-    const isConfirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?");
-    if (!isConfirmed) {
-      return;
-    }
-
-    setDepartment("");
-    setSubject("");
-    setSubjectDetail("");
-    setPurpose("");
-    setBudgetAmount("");
-    setVendorName("");
-    setTaxId("");
-    setVendorAddress("");
-    setReceiptNo("");
-    setReceiptDate("");
-    setAssignee("");
-    setAssigneePosition("");
-    setApprovedBy("");
-    setPaymentMethod("");
-    setAssigneeEmpCode("");
-    setLoanDocNo("");
-    setPaymentBudget(createEmptyPaymentBudgetForm());
-    setItems([createEmptyItem()]);
-    setVatMode(null);
-    setError(null);
-    setValidationErrors({});
-    setShowMissingSpecModal(false);
-    setMissingSpecRows([]);
-  };
-
   const itemTotal = (item: ItemForm) => parseNumber(item.qty) * parseNumber(item.price);
   const vatSummary = useMemo(() => {
     return items.reduce(
@@ -680,8 +651,7 @@ export default function GenerateClient() {
     return Array.from(new Set([...basicFields, ...missingItemFields]));
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submitForm = async (targetStatus: SubmitTargetStatus) => {
     const errors = validateForm();
     const missingSpecs = getMissingSpecRows(items);
     setValidationErrors(errors);
@@ -735,7 +705,8 @@ export default function GenerateClient() {
           no: index + 1,
           spec: item.spec ?? "",
           total: itemTotal(item)
-        }))
+        })),
+        status: targetStatus
       };
 
       const requestBody = editingJobId ? { ...payload, jobId: editingJobId } : payload;
@@ -780,6 +751,10 @@ export default function GenerateClient() {
       URL.revokeObjectURL(url);
 
       const createdJobId = response.headers.get("x-job-id");
+      window.sessionStorage.setItem(
+        "dashboard_success_message",
+        targetStatus === "review_pending" ? "ส่งงานเข้าสู่รอตรวจสอบแล้ว" : "ส่งงานเข้าสู่รออนุมัติแล้ว"
+      );
       router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
     } catch (submitError) {
       const message =
@@ -790,6 +765,11 @@ export default function GenerateClient() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await submitForm("pending");
   };
 
   return (
@@ -853,7 +833,7 @@ export default function GenerateClient() {
 
         {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
 
-        <form onSubmit={handleSubmit} className={styles.layout}>
+        <form onSubmit={(event) => void handleSubmit(event)} className={styles.layout}>
           <div className={styles.mainColumn}>
             <section className={styles.card}>
               <h2 className={styles.sectionTitle}>ข้อมูลเรื่อง</h2>
@@ -1470,11 +1450,16 @@ export default function GenerateClient() {
                         <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                       </span>
                     ) : (
-                      editingJobId ? "บันทึกและสร้างเอกสารใหม่" : "บันทึกและสร้างเอกสารใหม่"
+                      "บันทึกและส่งอนุมัติ"
                     )}
                   </button>
-                  <button type="button" className={styles.resetButton} onClick={resetForm}>
-                    ล้างข้อมูล
+                  <button
+                    type="button"
+                    className={styles.secondarySubmitButton}
+                    disabled={loading || !vatMode}
+                    onClick={() => void submitForm("review_pending")}
+                  >
+                    {loading ? "กำลังสร้างไฟล์..." : "ตรวจสอบก่อนส่ง"}
                   </button>
                 </div>
               </div>
