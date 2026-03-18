@@ -20,7 +20,6 @@ type DashboardOverviewResponse = {
 };
 
 let overviewRequest: Promise<DashboardOverviewResponse> | null = null;
-let overviewCache: DashboardOverviewResponse | null = null;
 
 const fetchJson = async <T extends object>(url: string): Promise<T> => {
   const response = await fetch(url, { method: "GET", cache: "no-store" });
@@ -35,27 +34,18 @@ const fetchJson = async <T extends object>(url: string): Promise<T> => {
 };
 
 const fetchOverviewDeduped = async () => {
-  if (overviewCache) {
-    return overviewCache;
-  }
-
   if (!overviewRequest) {
-    overviewRequest = fetchJson<DashboardOverviewResponse>("/api/dashboard/overview")
-      .then((payload) => {
-        overviewCache = payload;
-        return payload;
-      })
-      .finally(() => {
-        overviewRequest = null;
-      });
+    overviewRequest = fetchJson<DashboardOverviewResponse>("/api/dashboard/overview").finally(() => {
+      overviewRequest = null;
+    });
   }
 
   return overviewRequest;
 };
 
 export default function DashboardSummary() {
-  const [overviewData, setOverviewData] = useState<DashboardOverviewResponse | null>(overviewCache);
-  const [isLoading, setIsLoading] = useState(!overviewCache);
+  const [overviewData, setOverviewData] = useState<DashboardOverviewResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,6 +53,8 @@ export default function DashboardSummary() {
 
     async function loadOverview() {
       setIsLoading(true);
+      setError(null);
+
       try {
         const payload = await fetchOverviewDeduped();
 
