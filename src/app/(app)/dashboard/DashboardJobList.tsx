@@ -11,6 +11,7 @@ type DashboardJobListProps = {
   initialCounts: {
     activeCount: number;
     pendingReviewCount: number;
+    precheckPendingCount: number;
     needsFixCount: number;
     completedCount: number;
   };
@@ -26,6 +27,7 @@ type DashboardJobItem = JobRecord & {
 };
 
 type DashboardTab = "active" | "completed";
+type ActiveFilter = "all" | "main_flow" | "precheck";
 
 type DialogState = {
   id: string;
@@ -87,6 +89,10 @@ const normalizeStatus = (value: unknown): EffectiveStatus => {
     return trimmed;
   }
 
+  if (trimmed === "precheck_pending") {
+    return trimmed;
+  }
+
   return "pending_approval";
 };
 
@@ -144,6 +150,7 @@ const getGrandTotal = (itemsValue: unknown): number | null => {
 
 const getStatusLabel = (status: EffectiveStatus): string =>
   ({
+    precheck_pending: "รอตรวจเบื้องต้น",
     pending_approval: "รออนุมัติ",
     pending_review: "รอตรวจ",
     awaiting_payment: "รอเบิกจ่าย",
@@ -152,6 +159,7 @@ const getStatusLabel = (status: EffectiveStatus): string =>
   })[status];
 
 const statusClassName: Record<EffectiveStatus, string> = {
+  precheck_pending: "border-yellow-200 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 focus-visible:ring-yellow-300",
   pending_approval: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
   pending_review: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
   awaiting_payment: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 focus-visible:ring-emerald-300",
@@ -191,6 +199,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
   const [completedCount, setCompletedCount] = useState(initialCounts.completedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
   const [completedError, setCompletedError] = useState<string | null>(null);
 
@@ -210,18 +219,29 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
   }, [jobs]);
 
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
+  const precheckItems = useMemo(
+    () => activeItems.filter((item) => normalizeStatus(item.status) === "precheck_pending"),
+    [activeItems]
+  );
+  const mainFlowItems = useMemo(
+    () => activeItems.filter((item) => normalizeStatus(item.status) !== "precheck_pending"),
+    [activeItems]
+  );
   const completedItems = useMemo(() => {
     const base = completedItemsCache ?? [];
     return base.filter((item) => isCompletedStatus(item) && !item.isRemoving);
   }, [completedItemsCache]);
 
   const totalCount = isInitialJobsLoading ? initialCounts.activeCount : activeItems.length;
+  const precheckPendingCount = isInitialJobsLoading
+    ? initialCounts.precheckPendingCount
+    : precheckItems.length;
   const pendingReviewCount = isInitialJobsLoading
     ? initialCounts.pendingReviewCount
-    : activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
+    : mainFlowItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
   const needsFixCount = isInitialJobsLoading
     ? initialCounts.needsFixCount
-    : activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
+    : mainFlowItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
 
   const fetchCompletedItems = async () => {
     if (completedItemsCache || isCompletedLoading) {
@@ -254,6 +274,9 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
 
   const handleTabChange = (nextTab: DashboardTab) => {
     setCurrentTab(nextTab);
+    if (nextTab === "active") {
+      setActiveFilter("all");
+    }
 
     if (nextTab === "completed") {
       void fetchCompletedItems();
@@ -350,7 +373,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
   };
 
   const handleRequestNeedsFix = () => {
-    if (!dialog || dialog.status !== "pending_review" || isSaving) {
+    if (!dialog || (dialog.status !== "pending_review" && dialog.status !== "precheck_pending") || isSaving) {
       return;
     }
 
@@ -467,11 +490,17 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
     );
   }
 
-  const tableItems = currentTab === "active" ? activeItems : completedItems;
+  const tableItems = currentTab === "active"
+    ? activeFilter === "all"
+      ? activeItems
+      : activeFilter === "main_flow"
+        ? mainFlowItems
+        : precheckItems
+    : completedItems;
 
   return (
     <>
-      <div className="mb-6 grid gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid gap-3 sm:grid-cols-5">
         <KpiCard
           label="ทั้งหมด"
           value={totalCount}
@@ -479,6 +508,16 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           icon={
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
               <circle cx="12" cy="12" r="8" />
+            </svg>
+          }
+        />
+        <KpiCard
+          label="รอตรวจเบื้องต้น"
+          value={precheckPendingCount}
+          accent="bg-gradient-to-br from-yellow-400 to-amber-400"
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14h-2v-2h2zm0-4h-2V7h2z" />
             </svg>
           }
         />
@@ -538,6 +577,41 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           งานที่เสร็จแล้ว ({completedCount})
         </button>
       </div>
+      {currentTab === "active" ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveFilter("all")}
+            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+              activeFilter === "all" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            ทั้งหมด ({activeItems.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("main_flow")}
+            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+              activeFilter === "main_flow"
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            กระบวนการหลัก ({mainFlowItems.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("precheck")}
+            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+              activeFilter === "precheck"
+                ? "border-yellow-600 bg-yellow-500 text-white"
+                : "border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
+            }`}
+          >
+            รอตรวจเบื้องต้น ({precheckItems.length})
+          </button>
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
         <div className="hidden grid-cols-12 gap-3 border-b border-[color:var(--border)] bg-purple-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
@@ -617,17 +691,26 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
                       </>
                     ) : (
                       <>
+                        {status === "precheck_pending" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStatusClick(job, status)}
+                            className="focus-ring rounded-lg bg-yellow-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-yellow-600"
+                          >
+                            ตรวจเบื้องต้น
+                          </button>
+                        ) : null}
                         <Link
                           href={`/?job=${encodeURIComponent(id)}`}
                           className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
                         >
-                          แก้ไขงานนี้ →
+                          {status === "precheck_pending" ? "ดูรายละเอียด" : "แก้ไขงานนี้ →"}
                         </Link>
                         <Link
-                          href={`/?job=${encodeURIComponent(id)}`}
+                          href={`/dashboard/${encodeURIComponent(id)}`}
                           className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                         >
-                          ดูรายละเอียด
+                          {status === "precheck_pending" ? "เปิดหน้างาน" : "ดูรายละเอียด"}
                         </Link>
                       </>
                     )}

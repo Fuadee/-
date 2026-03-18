@@ -82,6 +82,7 @@ export async function GET() {
     const allJobs = (data ?? []) as unknown as Record<string, unknown>[];
     let activeCount = 0;
     let pendingReviewCount = 0;
+    let precheckPendingCount = 0;
     let needsFixCount = 0;
     let completedCount = 0;
 
@@ -93,6 +94,9 @@ export async function GET() {
 
       activeCount += 1;
       const normalizedStatus = typeof job.status === "string" ? job.status.trim() : "";
+      if (normalizedStatus === "precheck_pending") {
+        precheckPendingCount += 1;
+      }
       if (normalizedStatus === "pending_review") {
         pendingReviewCount += 1;
       }
@@ -105,6 +109,7 @@ export async function GET() {
       summary: {
         activeCount,
         pendingReviewCount,
+        precheckPendingCount,
         needsFixCount,
         completedCount
       },

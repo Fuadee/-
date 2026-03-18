@@ -9,6 +9,7 @@ type DashboardOverviewResponse = {
   summary: {
     total: number;
     pending: number;
+    precheckPending?: number;
     approved: number;
     rejected: number;
     completed: number;
@@ -113,6 +114,7 @@ export default function DashboardSummary() {
       initialCounts={{
         activeCount: Math.max(overviewData.summary.total - overviewData.summary.completed, 0),
         pendingReviewCount: overviewData.summary.pending,
+        precheckPendingCount: overviewData.summary.precheckPending ?? 0,
         needsFixCount: overviewData.summary.rejected,
         completedCount: overviewData.summary.completed
       }}

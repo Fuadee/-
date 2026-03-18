@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 
 type GenerateRequestBody = GeneratePayload & {
   jobId?: string;
+  submissionMode?: "main" | "precheck";
 };
 
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
@@ -22,7 +23,7 @@ const toNullableTrimmedString = (value: string | null | undefined) => {
   return trimmed ? trimmed : null;
 };
 
-const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>) => {
+const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>, submissionMode: "main" | "precheck") => {
   const writeData: Record<string, unknown> = {};
 
   if (availableColumns.has("title")) writeData.title = deriveTitle(body);
@@ -39,14 +40,14 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   if (availableColumns.has("loan_doc_no")) {
     writeData.loan_doc_no = toNullableTrimmedString(body.loan_doc_no);
   }
-  if (availableColumns.has("status")) writeData.status = "generated";
+  if (availableColumns.has("status")) writeData.status = submissionMode === "precheck" ? "precheck_pending" : "generated";
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();
 
   return writeData;
 };
 
-async function upsertJobRecord(body: GeneratePayload, jobId?: string): Promise<string | null> {
+async function upsertJobRecord(body: GeneratePayload, jobId?: string, submissionMode: "main" | "precheck" = "main"): Promise<string | null> {
   const supabase = createSupabaseServer();
   const {
     data: { user }
@@ -58,7 +59,7 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string): Promise<s
   }
 
   const availableColumns = await resolveAvailableColumns(supabase, table);
-  const writeData = buildPersistedData(body, availableColumns);
+  const writeData = buildPersistedData(body, availableColumns, submissionMode);
 
   if (jobId) {
     let updateQuery = supabase.from(table).update(writeData).eq("id", jobId);
@@ -100,7 +101,16 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string): Promise<s
 export async function POST(request: NextRequest) {
   try {
     const requestBody = (await request.json()) as GenerateRequestBody;
-    const { jobId, ...body } = requestBody;
+    const { jobId, submissionMode = "main", ...body } = requestBody;
+
+    const createdJobId = await upsertJobRecord(body, jobId, submissionMode);
+    if (submissionMode === "precheck") {
+      return NextResponse.json({
+        ok: true,
+        message: "บันทึกงานและส่งรอตรวจเบื้องต้นแล้ว",
+        jobId: createdJobId
+      });
+    }
 
     const templatePath = process.cwd() + "/templates/template.docx";
     const content = await readFile(path.resolve(templatePath), "binary");
@@ -118,8 +128,6 @@ export async function POST(request: NextRequest) {
       mimeType:
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     });
-
-    const createdJobId = await upsertJobRecord(body, jobId);
 
     const date = new Date().toISOString().slice(0, 10);
     const filename = `หนังสือราชการ_${date}.docx`;

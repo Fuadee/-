@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type EffectiveStatus = "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
+type EffectiveStatus = "precheck_pending" | "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
 
 type StatusActionDialogProps = {
   open: boolean;
@@ -206,6 +206,45 @@ export default function StatusActionDialog({
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSaving ? "กำลังบันทึก..." : "ลงแล้ว"}
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {status === "precheck_pending" ? (
+          <>
+            <h2 className="text-lg font-semibold text-slate-900">ตรวจสอบก่อนส่ง</h2>
+            <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
+            <p className="mt-4 text-sm text-slate-700">งานนี้ยังไม่เข้าสู่กระบวนการหลัก คุณสามารถส่งเข้ากระบวนการหลักหรือส่งกลับแก้ไขได้</p>
+
+            {errorMessage ? (
+              <p className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage}</p>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={onRequestNeedsFix}
+                disabled={isSaving}
+                className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                ส่งกลับให้แก้ไข
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateStatus("pending_approval")}
+                disabled={isSaving}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSaving ? "กำลังบันทึก..." : "ส่งเข้ากระบวนการหลัก"}
               </button>
             </div>
           </>
