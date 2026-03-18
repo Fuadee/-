@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { sendLineGroupNotification } from "@/lib/line";
+import { buildPrecheckApprovedLineMessage, resolveRequesterProfile } from "@/lib/lineNotifications";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { calculateVatBreakdown, type VatMode } from "@/lib/vat";
@@ -87,6 +88,8 @@ const formatAmount = (value: number | null): string =>
 const PAYMENT_DONE_STATUS = "ดำเนินการแล้วเสร็จ";
 
 const NEEDS_FIX_STATUS = "needs_fix";
+const PRECHECK_PENDING_STATUS = "precheck_pending";
+const MAIN_PROCESS_STATUSES = new Set(["main_process", "pending_approval"]);
 
 const formatThaiDateTime = (date: Date): string => {
   const datePart = new Intl.DateTimeFormat("th-TH", {
@@ -414,6 +417,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ message: "กรุณาระบุสถานะที่ต้องการอัปเดต" }, { status: 400 });
   }
 
+  const previousStatusNormalized = asTrimmedString(existingJob.status).toLowerCase();
+  const nextStatusNormalized = nextStatus.toLowerCase();
+  const shouldSendPrecheckApprovedLine =
+    previousStatusNormalized === PRECHECK_PENDING_STATUS &&
+    MAIN_PROCESS_STATUSES.has(nextStatusNormalized) &&
+    previousStatusNormalized !== nextStatusNormalized;
+
   let updateQuery = supabase.from(table).update({ status: nextStatus }).eq("id", params.id).select("*").limit(1);
   if (availableColumns.has("user_id")) {
     updateQuery = updateQuery.eq("user_id", user.id);
@@ -434,6 +444,37 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       await sendLineGroupNotification(buildPaymentDoneMessage(existingJob, user));
     } catch (lineError) {
       console.error("Unable to send LINE paid notification:", lineError);
+    }
+  }
+
+  if (shouldSendPrecheckApprovedLine) {
+    const assigneeNameFromJob = getAssigneeDisplayNameFromJob(job);
+    const assigneeNameById = await tryResolveNameById(supabase, resolveAssigneeId(job));
+    const requesterProfile = resolveRequesterProfile(user);
+    const origin = getOriginFromRequest(request);
+    const jobUrl = `${origin}/dashboard/${encodeURIComponent(String(job.id ?? params.id))}`;
+    const approvedAt = new Date();
+    const payloadForLine = job.payload ?? existingJob.payload ?? {};
+
+    const lineMessage = buildPrecheckApprovedLineMessage({
+      payload: payloadForLine,
+      assigneeName: assigneeNameFromJob || assigneeNameById,
+      requesterName: requesterProfile.requesterName,
+      requesterDisplayName: requesterProfile.requesterDisplayName,
+      requesterEmail: requesterProfile.requesterEmail,
+      approvedAt,
+      jobUrl
+    });
+
+    try {
+      await sendLineGroupNotification(lineMessage);
+    } catch (lineError) {
+      console.error("Unable to send LINE precheck-approved notification:", {
+        error: lineError,
+        jobId: params.id,
+        previousStatus: existingJob.status,
+        nextStatus
+      });
     }
   }
 
