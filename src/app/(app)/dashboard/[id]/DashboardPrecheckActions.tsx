@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-const MAIN_FLOW_ENTRY_STATUS = "pending_approval";
+const MAIN_FLOW_ENTRY_STATUS = "document_pending";
 
 type DashboardPrecheckActionsProps = {
   jobId: string;
@@ -37,7 +37,7 @@ export default function DashboardPrecheckActions({ jobId }: DashboardPrecheckAct
       return;
     }
 
-    setMessage(action === "main" ? "ส่งเข้ากระบวนการหลักแล้ว" : "ส่งกลับให้แก้ไขแล้ว");
+    setMessage(action === "main" ? "ส่งเข้าขั้นสร้างเอกสารแล้ว" : "ส่งกลับให้แก้ไขแล้ว");
     setLoadingAction(null);
     window.setTimeout(() => {
       window.location.reload();

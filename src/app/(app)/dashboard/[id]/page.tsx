@@ -29,6 +29,9 @@ const getStatusLabel = (status: string) => {
   if (status === "precheck_pending") {
     return "รอตรวจเบื้องต้น";
   }
+  if (status === "document_pending") {
+    return "รอสร้างเอกสาร";
+  }
   return status || "-";
 };
 
@@ -75,12 +78,12 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
         <div className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold text-slate-900">{getJobTitle(job)}</h1>
           <div className="flex items-center gap-2">
-            {normalizedStatus === "precheck_pending" ? (
+            {normalizedStatus === "precheck_pending" || normalizedStatus === "document_pending" ? (
               <Link
                 href={`/?job=${encodeURIComponent(String(job.id ?? params.id))}`}
                 className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(147,51,234,0.35)] transition hover:brightness-105"
               >
-                ตรวจสอบงานนี้
+                {normalizedStatus === "document_pending" ? "สร้างเอกสาร" : "ตรวจสอบงานนี้"}
               </Link>
             ) : null}
             <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
@@ -100,6 +103,11 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
         {normalizedStatus === "precheck_pending" ? (
           <div className="mt-4 inline-flex rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-sm font-medium text-yellow-800">
             รอตรวจเบื้องต้น
+          </div>
+        ) : null}
+        {normalizedStatus === "document_pending" ? (
+          <div className="mt-4 inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
+            รอสร้างเอกสาร
           </div>
         ) : null}
 

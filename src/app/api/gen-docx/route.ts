@@ -19,6 +19,8 @@ type GenerateRequestBody = GeneratePayload & {
 };
 
 const PRECHECK_DEBUG_PREFIX = "[precheck-line]";
+const PRECHECK_PENDING_STATUS = "precheck_pending";
+const PENDING_APPROVAL_STATUS = "pending_approval";
 
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
 
@@ -86,7 +88,7 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   if (availableColumns.has("loan_doc_no")) {
     writeData.loan_doc_no = toNullableTrimmedString(body.loan_doc_no);
   }
-  if (availableColumns.has("status")) writeData.status = submissionMode === "precheck" ? "precheck_pending" : "generated";
+  if (availableColumns.has("status")) writeData.status = submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS;
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();
 
@@ -138,12 +140,12 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     }
     const previousStatusResult = await previousStatusQuery;
     const previousStatus = ((previousStatusResult.data ?? [])[0] as { status?: string } | undefined)?.status?.trim() ?? "";
-    const nextStatus = submissionMode === "precheck" ? "precheck_pending" : "generated";
-    const shouldSendPrecheckLine = submissionMode === "precheck" && previousStatus !== "precheck_pending";
+    const nextStatus = submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS;
+    const shouldSendPrecheckLine = submissionMode === "precheck" && previousStatus !== PRECHECK_PENDING_STATUS;
     const shouldSendPrecheckLineReason =
       submissionMode !== "precheck"
         ? "submissionMode is not precheck"
-        : previousStatus === "precheck_pending"
+        : previousStatus === PRECHECK_PENDING_STATUS
           ? "previous status already precheck_pending"
           : "precheck update and previous status is not precheck_pending";
 
@@ -197,7 +199,7 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     shouldSendPrecheckLine: submissionMode === "precheck",
     operation: "create",
     previousStatus: null,
-    nextStatus: submissionMode === "precheck" ? "precheck_pending" : "generated",
+    nextStatus: submissionMode === "precheck" ? PRECHECK_PENDING_STATUS : PENDING_APPROVAL_STATUS,
     shouldSendPrecheckLineReason:
       submissionMode === "precheck" ? "new precheck job" : "submissionMode is not precheck"
   };
