@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import { createSupabaseServer } from "@/lib/supabase/server";
 import { getJobFileUrl, getJobTitle, resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
-import DashboardPrecheckActions from "./DashboardPrecheckActions";
 
 const formatDate = (value: unknown) => {
   if (typeof value !== "string" || !value) {
@@ -27,6 +26,13 @@ const renderField = (label: string, value: unknown) => (
     <p className="mt-1 text-slate-900">{typeof value === "string" && value.trim() ? value : "-"}</p>
   </div>
 );
+
+const getStatusLabel = (status: string) => {
+  if (status === "precheck_pending") {
+    return "รอตรวจเบื้องต้น";
+  }
+  return status || "-";
+};
 
 export default async function DashboardDetailPage({ params }: { params: { id: string } }) {
   const supabase = createSupabaseServer();
@@ -70,18 +76,34 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold text-slate-900">{getJobTitle(job)}</h1>
-          <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-            ← กลับไป Dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            {normalizedStatus === "precheck_pending" ? (
+              <Link
+                href={`/?job=${encodeURIComponent(String(job.id ?? params.id))}`}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                แก้ไขงานนี้
+              </Link>
+            ) : null}
+            <Link href="/dashboard" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              ← กลับไป Dashboard
+            </Link>
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {renderField("สถานะ", job.status)}
+          {renderField("สถานะ", getStatusLabel(normalizedStatus))}
           {renderField("สร้างเมื่อ", formatDate(job.created_at))}
           {availableColumns.has("department") && renderField("แผนก", job.department)}
           {availableColumns.has("subject") && renderField("เรื่อง", job.subject)}
           {availableColumns.has("user_id") && renderField("ผู้ใช้งาน", job.user_id)}
         </div>
+
+        {normalizedStatus === "precheck_pending" ? (
+          <div className="mt-4 inline-flex rounded-full border border-yellow-200 bg-yellow-50 px-3 py-1 text-sm font-medium text-yellow-800">
+            รอตรวจเบื้องต้น
+          </div>
+        ) : null}
 
         {fileUrl ? (
           <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
@@ -96,8 +118,6 @@ export default async function DashboardDetailPage({ params }: { params: { id: st
             </a>
           </div>
         ) : null}
-
-        {normalizedStatus === "precheck_pending" ? <DashboardPrecheckActions jobId={String(job.id ?? params.id)} /> : null}
       </div>
     </section>
   );
