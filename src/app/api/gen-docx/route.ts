@@ -6,7 +6,9 @@ import PizZip from "pizzip";
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildDocxTemplateData, type GeneratePayload } from "@/lib/docxTemplateData";
-import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
+import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
+import { sendLineGroupNotification } from "@/lib/line";
+import { buildPrecheckPendingLineMessage, resolveRequesterName } from "@/lib/lineNotifications";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -21,6 +23,23 @@ const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purp
 const toNullableTrimmedString = (value: string | null | undefined) => {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+};
+
+
+const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+
+const getOriginFromRequest = (request: NextRequest): string => {
+  const envBaseUrl =
+    asTrimmedString(process.env.NEXT_PUBLIC_APP_URL) ||
+    asTrimmedString(process.env.APP_URL) ||
+    asTrimmedString(process.env.BASE_URL);
+
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, "");
+  }
+
+  const origin = request.nextUrl.origin || `${request.headers.get("x-forwarded-proto") ?? "https"}://${request.headers.get("host") ?? ""}`;
+  return origin.replace(/\/$/, "");
 };
 
 const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>, submissionMode: "main" | "precheck") => {
@@ -47,7 +66,13 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   return writeData;
 };
 
-async function upsertJobRecord(body: GeneratePayload, jobId?: string, submissionMode: "main" | "precheck" = "main"): Promise<string | null> {
+type UpsertResult = {
+  jobId: string | null;
+  job: JobRecord | null;
+  shouldSendPrecheckLine: boolean;
+};
+
+async function upsertJobRecord(body: GeneratePayload, jobId?: string, submissionMode: "main" | "precheck" = "main"): Promise<UpsertResult> {
   const supabase = createSupabaseServer();
   const {
     data: { user }
@@ -55,7 +80,7 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
 
   const table = await resolveJobsTable(supabase);
   if (!table) {
-    return null;
+    return { jobId: null, job: null, shouldSendPrecheckLine: false };
   }
 
   const availableColumns = await resolveAvailableColumns(supabase, table);
@@ -68,17 +93,28 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       updateQuery = updateQuery.eq("user_id", user.id);
     }
 
-    const { data, error } = await updateQuery.select("id").limit(1);
+    let previousStatusQuery = supabase.from(table).select("status").eq("id", jobId).limit(1);
+    if (user && availableColumns.has("user_id")) {
+      previousStatusQuery = previousStatusQuery.eq("user_id", user.id);
+    }
+    const previousStatusResult = await previousStatusQuery;
+    const previousStatus = ((previousStatusResult.data ?? [])[0] as { status?: string } | undefined)?.status?.trim() ?? "";
+
+    const { data, error } = await updateQuery.select("*").limit(1);
     if (error) {
       throw new Error(`ไม่สามารถอัปเดตงานเอกสารได้: ${error.message}`);
     }
 
-    const updated = (data ?? [])[0] as { id?: string } | undefined;
+    const updated = ((data ?? [])[0] ?? null) as JobRecord | null;
     if (!updated?.id) {
       throw new Error("ไม่พบงานเอกสารที่ต้องการแก้ไข หรือไม่มีสิทธิ์เข้าถึง");
     }
 
-    return updated.id;
+    return {
+      jobId: String(updated.id),
+      job: updated,
+      shouldSendPrecheckLine: submissionMode === "precheck" && previousStatus !== "precheck_pending"
+    };
   }
 
   if (availableColumns.has("user_id") && user?.id) {
@@ -86,16 +122,21 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   }
 
   if (Object.keys(writeData).length === 0) {
-    return null;
+    return { jobId: null, job: null, shouldSendPrecheckLine: false };
   }
 
-  const { data, error } = await supabase.from(table).insert(writeData).select("id").limit(1);
+  const { data, error } = await supabase.from(table).insert(writeData).select("*").limit(1);
   if (error) {
     throw new Error(`ไม่สามารถบันทึกงานเอกสารได้: ${error.message}`);
   }
 
-  const created = (data ?? [])[0] as { id?: string } | undefined;
-  return created?.id ?? null;
+  const created = ((data ?? [])[0] ?? null) as JobRecord | null;
+
+  return {
+    jobId: created?.id ? String(created.id) : null,
+    job: created,
+    shouldSendPrecheckLine: submissionMode === "precheck"
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -103,7 +144,41 @@ export async function POST(request: NextRequest) {
     const requestBody = (await request.json()) as GenerateRequestBody;
     const { jobId, submissionMode = "main", ...body } = requestBody;
 
-    const createdJobId = await upsertJobRecord(body, jobId, submissionMode);
+    const { jobId: createdJobId, job: savedJob, shouldSendPrecheckLine } = await upsertJobRecord(body, jobId, submissionMode);
+
+    if (submissionMode === "precheck" && shouldSendPrecheckLine && savedJob) {
+      const supabase = createSupabaseServer();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      const origin = getOriginFromRequest(request);
+      const resolvedJobId = createdJobId ?? String(savedJob.id ?? "").trim();
+      const jobUrl = `${origin}/dashboard/${encodeURIComponent(resolvedJobId)}`;
+
+      const createdAtRaw = typeof savedJob.created_at === "string" ? savedJob.created_at : null;
+      const createdAt = createdAtRaw ? new Date(createdAtRaw) : new Date();
+
+      const lineMessage = buildPrecheckPendingLineMessage({
+        payload: savedJob.payload ?? body,
+        requesterName: resolveRequesterName(user),
+        createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
+        jobUrl
+      });
+
+      try {
+        await sendLineGroupNotification(lineMessage);
+        console.info("LINE precheck_pending notification sent", {
+          jobId: resolvedJobId
+        });
+      } catch (lineError) {
+        console.error("Unable to send LINE precheck_pending notification", {
+          jobId: resolvedJobId,
+          error: lineError
+        });
+      }
+    }
+
     if (submissionMode === "precheck") {
       return NextResponse.json({
         ok: true,
