@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type EffectiveStatus = "pending" | "review_pending" | "awaiting_payment" | "revision_requested" | "completed";
+type EffectiveStatus = "pending_approval" | "pending_review" | "awaiting_payment" | "needs_fix" | "completed";
 
 type StatusActionDialogProps = {
   open: boolean;
@@ -167,7 +167,7 @@ export default function StatusActionDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        {status === "pending" ? (
+        {status === "pending_approval" ? (
           <>
             <h2 className="text-lg font-semibold text-slate-900">อัปเดตสถานะงาน</h2>
             <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
@@ -201,7 +201,7 @@ export default function StatusActionDialog({
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("awaiting_payment")}
+                onClick={() => onUpdateStatus("pending_review")}
                 disabled={isSaving}
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -211,7 +211,7 @@ export default function StatusActionDialog({
           </>
         ) : null}
 
-        {status === "review_pending" ? (
+        {status === "pending_review" ? (
           <>
             <h2 className="text-lg font-semibold text-slate-900">ตรวจแล้วเสร็จ</h2>
             <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
@@ -233,23 +233,23 @@ export default function StatusActionDialog({
                 type="button"
                 onClick={onRequestNeedsFix}
                 disabled={isSaving}
-                className="rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ส่งกลับแก้ไข
+                กลับไปแก้ไข
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("pending")}
+                onClick={() => onUpdateStatus("awaiting_payment")}
                 disabled={isSaving}
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                ผ่านการตรวจ
+                ตรวจผ่าน
               </button>
             </div>
           </>
         ) : null}
 
-        {status === "revision_requested" ? (
+        {status === "needs_fix" ? (
           <>
             <h2 className="text-lg font-semibold text-slate-900">แก้ไขเสร็จแล้วหรือไม่?</h2>
             <p className="mt-2 text-sm text-slate-600">{jobTitle}</p>
@@ -269,7 +269,7 @@ export default function StatusActionDialog({
               </button>
               <button
                 type="button"
-                onClick={() => onUpdateStatus("review_pending")}
+                onClick={() => onUpdateStatus("pending_review")}
                 disabled={isSaving}
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >

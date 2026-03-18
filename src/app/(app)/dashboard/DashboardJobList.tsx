@@ -26,7 +26,6 @@ type DashboardJobItem = JobRecord & {
 };
 
 type DashboardTab = "active" | "completed";
-type ActiveStatusFilter = "all" | "review_pending" | "pending" | "revision_requested";
 
 type DialogState = {
   id: string;
@@ -72,47 +71,23 @@ const formatDate = (value: unknown) => {
 
 const normalizeStatus = (value: unknown): EffectiveStatus => {
   if (typeof value !== "string") {
-    return "pending";
+    return "pending_approval";
   }
 
   const trimmed = value.trim();
   if (!trimmed || trimmed === "generated") {
-    return "pending";
+    return "pending_approval";
   }
 
   if (trimmed === "ดำเนินการแล้วเสร็จ") {
     return "completed";
   }
 
-  if (trimmed === "pending_approval") {
-    return "pending";
-  }
-
-  if (trimmed === "pending_review") {
-    return "review_pending";
-  }
-
-  if (trimmed === "needs_fix") {
-    return "revision_requested";
-  }
-
-  if (trimmed === "รอตรวจสอบ" || trimmed === "รอตรวจ") {
-    return "review_pending";
-  }
-
-  if (trimmed === "รอการแก้ไข") {
-    return "revision_requested";
-  }
-
-  if (trimmed === "รออนุมัติ") {
-    return "pending";
-  }
-
-  if (trimmed === "review_pending" || trimmed === "awaiting_payment" || trimmed === "revision_requested" || trimmed === "pending" || trimmed === "completed") {
+  if (trimmed === "pending_review" || trimmed === "awaiting_payment" || trimmed === "needs_fix" || trimmed === "pending_approval" || trimmed === "completed") {
     return trimmed;
   }
 
-  return "pending";
+  return "pending_approval";
 };
 
 const isCompletedStatus = (job: Pick<DashboardJobItem, "status">): boolean => {
@@ -169,18 +144,18 @@ const getGrandTotal = (itemsValue: unknown): number | null => {
 
 const getStatusLabel = (status: EffectiveStatus): string =>
   ({
-    pending: "รออนุมัติ",
-    review_pending: "รอตรวจสอบ",
+    pending_approval: "รออนุมัติ",
+    pending_review: "รอตรวจ",
     awaiting_payment: "รอเบิกจ่าย",
-    revision_requested: "รอแก้ไข",
+    needs_fix: "รอการแก้ไข",
     completed: "ดำเนินการแล้วเสร็จ"
   })[status];
 
 const statusClassName: Record<EffectiveStatus, string> = {
-  pending: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
-  review_pending: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
+  pending_approval: "border-purple-100 bg-purple-50 text-purple-700 hover:bg-purple-100 focus-visible:ring-purple-300",
+  pending_review: "border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:ring-amber-300",
   awaiting_payment: "border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 focus-visible:ring-emerald-300",
-  revision_requested: "border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300",
+  needs_fix: "border-rose-100 bg-rose-50 text-rose-700 hover:bg-rose-100 focus-visible:ring-rose-300",
   completed: "border-sky-100 bg-sky-50 text-sky-700 hover:bg-sky-100 focus-visible:ring-sky-300"
 };
 
@@ -218,13 +193,11 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
   const [completedError, setCompletedError] = useState<string | null>(null);
-  const [activeStatusFilter, setActiveStatusFilter] = useState<ActiveStatusFilter>("all");
 
   const [dialog, setDialog] = useState<DialogState>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
   const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
   const [needsFixDialog, setNeedsFixDialog] = useState<NeedsFixDialogState>(null);
@@ -236,18 +209,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
     setItems(jobs.map(toDashboardItem));
   }, [jobs]);
 
-  useEffect(() => {
-    const flashMessage = window.sessionStorage.getItem("dashboard_success_message");
-    if (!flashMessage) {
-      return;
-    }
-
-    setSuccessMessage(flashMessage);
-    window.sessionStorage.removeItem("dashboard_success_message");
-    const timeoutId = window.setTimeout(() => setSuccessMessage(null), 3000);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const completedItems = useMemo(() => {
     const base = completedItemsCache ?? [];
@@ -257,11 +218,10 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
   const totalCount = isInitialJobsLoading ? initialCounts.activeCount : activeItems.length;
   const pendingReviewCount = isInitialJobsLoading
     ? initialCounts.pendingReviewCount
-    : activeItems.filter((item) => normalizeStatus(item.status) === "review_pending").length;
-  const pendingApprovalCount = activeItems.filter((item) => normalizeStatus(item.status) === "pending").length;
+    : activeItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
   const needsFixCount = isInitialJobsLoading
     ? initialCounts.needsFixCount
-    : activeItems.filter((item) => normalizeStatus(item.status) === "revision_requested").length;
+    : activeItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
 
   const fetchCompletedItems = async () => {
     if (completedItemsCache || isCompletedLoading) {
@@ -347,7 +307,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
       grandTotal: getGrandTotal(payload.items)
     });
     setErrorMessage(null);
-    setSuccessMessage(null);
     setPaymentErrorMessage(null);
     setPaymentSuccessMessage(null);
   };
@@ -386,17 +345,12 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
       setItems((prev) => prev.map((item) => (item.id === dialog.id ? { ...item, status: nextStatus } : item)));
     }
 
-    if (dialog.status === "review_pending" && nextStatus === "pending") {
-      setSuccessMessage("เปลี่ยนสถานะเป็นรออนุมัติแล้ว");
-      window.setTimeout(() => setSuccessMessage(null), 2500);
-    }
-
     setDialog(null);
     setIsSaving(false);
   };
 
   const handleRequestNeedsFix = () => {
-    if (!dialog || dialog.status !== "review_pending" || isSaving) {
+    if (!dialog || dialog.status !== "pending_review" || isSaving) {
       return;
     }
 
@@ -432,7 +386,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ status: "revision_requested", revisionNote: trimmedNote })
+        body: JSON.stringify({ status: "needs_fix", revisionNote: trimmedNote })
       });
 
       if (!response.ok) {
@@ -441,15 +395,11 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
         return;
       }
 
-      setItems((prev) =>
-        prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "revision_requested", revision_note: trimmedNote } : item))
-      );
+      setItems((prev) => prev.map((item) => (item.id === needsFixDialog.id ? { ...item, status: "needs_fix", revision_note: trimmedNote } : item)));
       setNeedsFixDialog(null);
       setDialog(null);
       setRevisionNote("");
       setRevisionError(null);
-      setSuccessMessage("ส่งงานกลับไปแก้ไขแล้ว");
-      window.setTimeout(() => setSuccessMessage(null), 2500);
     } finally {
       setIsSubmitting(false);
     }
@@ -517,15 +467,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
     );
   }
 
-  const filteredActiveItems = useMemo(() => {
-    if (activeStatusFilter === "all") {
-      return activeItems;
-    }
-
-    return activeItems.filter((item) => normalizeStatus(item.status) === activeStatusFilter);
-  }, [activeItems, activeStatusFilter]);
-
-  const tableItems = currentTab === "active" ? filteredActiveItems : completedItems;
+  const tableItems = currentTab === "active" ? activeItems : completedItems;
 
   return (
     <>
@@ -541,7 +483,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           }
         />
         <KpiCard
-          label="รอตรวจสอบ"
+          label="รอตรวจ"
           value={pendingReviewCount}
           accent="bg-gradient-to-br from-amber-400 to-orange-400"
           icon={
@@ -551,7 +493,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           }
         />
         <KpiCard
-          label="รอแก้ไข"
+          label="รอการแก้ไข"
           value={needsFixCount}
           accent="bg-gradient-to-br from-rose-500 to-fuchsia-500"
           icon={
@@ -596,30 +538,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           งานที่เสร็จแล้ว ({completedCount})
         </button>
       </div>
-
-      {currentTab === "active" ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {[
-            { key: "all", label: `ทั้งหมด (${activeItems.length})` },
-            { key: "review_pending", label: `รอตรวจสอบ (${pendingReviewCount})` },
-            { key: "pending", label: `รออนุมัติ (${pendingApprovalCount})` },
-            { key: "revision_requested", label: `รอแก้ไข (${needsFixCount})` }
-          ].map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              onClick={() => setActiveStatusFilter(filter.key as ActiveStatusFilter)}
-              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                activeStatusFilter === filter.key
-                  ? "border-purple-200 bg-purple-50 text-purple-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
 
       <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
         <div className="hidden grid-cols-12 gap-3 border-b border-[color:var(--border)] bg-purple-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
@@ -699,23 +617,14 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
                       </>
                     ) : (
                       <>
-                        {status === "review_pending" ? (
-                          <Link
-                            href={`/dashboard/${encodeURIComponent(id)}`}
-                            className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-amber-700 underline decoration-amber-300 decoration-2 underline-offset-4 transition hover:text-amber-900"
-                          >
-                            รีวิวงานนี้ →
-                          </Link>
-                        ) : (
-                          <Link
-                            href={`/?job=${encodeURIComponent(id)}`}
-                            className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
-                          >
-                            {status === "revision_requested" ? "แก้ไขงานนี้ (ด่วน) →" : "แก้ไขงานนี้ →"}
-                          </Link>
-                        )}
                         <Link
-                          href={`/dashboard/${encodeURIComponent(id)}`}
+                          href={`/?job=${encodeURIComponent(id)}`}
+                          className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
+                        >
+                          แก้ไขงานนี้ →
+                        </Link>
+                        <Link
+                          href={`/?job=${encodeURIComponent(id)}`}
                           className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                         >
                           ดูรายละเอียด
@@ -729,11 +638,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
 
             {!isCompletedLoading && tableItems.length === 0 ? (
               <div className="px-6 py-10 text-center text-sm text-slate-500">
-                {currentTab === "active"
-                  ? activeStatusFilter === "all"
-                    ? "ไม่มีงานที่กำลังดำเนินการ"
-                    : "ไม่พบงานในตัวกรองนี้"
-                  : "ยังไม่มีงานที่เสร็จแล้ว"}
+                {currentTab === "active" ? "ไม่มีงานที่กำลังดำเนินการ" : "ยังไม่มีงานที่เสร็จแล้ว"}
               </div>
             ) : null}
           </div>
@@ -748,12 +653,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
         </div>
       ) : null}
 
-      {successMessage ? (
-        <div className="fixed right-4 top-4 z-[59] max-w-sm rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow">
-          {successMessage}
-        </div>
-      ) : null}
-
       {needsFixDialog && revisionError ? (
         <div className="fixed right-4 top-4 z-[70] max-w-sm rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow">
           {revisionError}
@@ -763,7 +662,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
       <StatusActionDialog
         open={Boolean(dialog)}
         jobTitle={dialog?.title ?? ""}
-        status={dialog?.status ?? "pending"}
+        status={dialog?.status ?? "pending_approval"}
         detailsText={dialog?.detailsText ?? ""}
         vendorName={dialog?.vendorName ?? ""}
         taxId={dialog?.taxId ?? ""}

@@ -18,25 +18,6 @@ type DashboardOverviewResponse = {
   currentUserId: string | null;
 };
 
-const normalizeDashboardStatus = (value: unknown): string => {
-  if (typeof value !== "string") {
-    return "pending";
-  }
-
-  const trimmed = value.trim();
-  if (trimmed === "pending_review" || trimmed === "review_pending" || trimmed === "รอตรวจสอบ" || trimmed === "รอตรวจ") {
-    return "review_pending";
-  }
-  if (trimmed === "needs_fix" || trimmed === "revision_requested" || trimmed === "รอการแก้ไข" || trimmed === "รอแก้ไข") {
-    return "revision_requested";
-  }
-  if (trimmed === "pending_approval" || trimmed === "รออนุมัติ") {
-    return "pending";
-  }
-
-  return trimmed;
-};
-
 let overviewRequest: Promise<DashboardOverviewResponse> | null = null;
 let overviewCache: DashboardOverviewResponse | null = null;
 
@@ -131,8 +112,8 @@ export default function DashboardSummary() {
       jobs={overviewData.jobs}
       initialCounts={{
         activeCount: Math.max(overviewData.summary.total - overviewData.summary.completed, 0),
-        pendingReviewCount: overviewData.jobs.filter((job) => normalizeDashboardStatus(job.status) === "review_pending").length,
-        needsFixCount: overviewData.jobs.filter((job) => normalizeDashboardStatus(job.status) === "revision_requested").length,
+        pendingReviewCount: overviewData.summary.pending,
+        needsFixCount: overviewData.summary.rejected,
         completedCount: overviewData.summary.completed
       }}
       isInitialJobsLoading={isLoading}

@@ -19,9 +19,9 @@ const DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS = 30 * 60 * 1000;
 const DASHBOARD_FALLBACK_TITLE = "(ไม่ระบุชื่องาน)";
 
 const COMPLETED_STATUSES = ["completed", "ดำเนินการแล้วเสร็จ"] as const;
-const PENDING_STATUSES = ["pending", "pending_review", "pending_approval", "review_pending", "awaiting_payment", "รอตรวจ", "รอตรวจสอบ", "รออนุมัติ", "รอเบิกจ่าย"] as const;
+const PENDING_STATUSES = ["pending", "pending_review", "pending_approval", "awaiting_payment", "รอตรวจ", "รออนุมัติ", "รอเบิกจ่าย"] as const;
 const APPROVED_STATUSES = ["approved", "อนุมัติ", "อนุมัติแล้ว"] as const;
-const REJECTED_STATUSES = ["rejected", "needs_fix", "revision_requested", "ไม่อนุมัติ", "รอการแก้ไข", "รอแก้ไข"] as const;
+const REJECTED_STATUSES = ["rejected", "needs_fix", "ไม่อนุมัติ", "รอการแก้ไข"] as const;
 
 const isCompletedStatus = (value: unknown): boolean => {
   if (typeof value !== "string") {

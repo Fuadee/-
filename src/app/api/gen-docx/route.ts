@@ -13,26 +13,6 @@ export const runtime = "nodejs";
 
 type GenerateRequestBody = GeneratePayload & {
   jobId?: string;
-  status?: string;
-};
-
-const ALLOWED_CREATE_STATUSES = new Set(["pending", "review_pending", "draft", "revision_requested"]);
-
-const resolveRequestedStatus = (value: unknown): string => {
-  if (typeof value !== "string") {
-    return "pending";
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "pending";
-  }
-
-  if (!ALLOWED_CREATE_STATUSES.has(trimmed)) {
-    throw new Error("status ไม่ถูกต้อง");
-  }
-
-  return trimmed;
 };
 
 const deriveTitle = (body: GeneratePayload) => body.subject?.trim() || body.purpose?.trim() || "งานสร้างเอกสาร";
@@ -42,7 +22,7 @@ const toNullableTrimmedString = (value: string | null | undefined) => {
   return trimmed ? trimmed : null;
 };
 
-const buildPersistedData = (body: GenerateRequestBody, availableColumns: Set<string>) => {
+const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>) => {
   const writeData: Record<string, unknown> = {};
 
   if (availableColumns.has("title")) writeData.title = deriveTitle(body);
@@ -59,14 +39,14 @@ const buildPersistedData = (body: GenerateRequestBody, availableColumns: Set<str
   if (availableColumns.has("loan_doc_no")) {
     writeData.loan_doc_no = toNullableTrimmedString(body.loan_doc_no);
   }
-  if (availableColumns.has("status")) writeData.status = resolveRequestedStatus(body.status);
+  if (availableColumns.has("status")) writeData.status = "generated";
   if (availableColumns.has("payload")) writeData.payload = body;
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();
 
   return writeData;
 };
 
-async function upsertJobRecord(body: GenerateRequestBody, jobId?: string): Promise<string | null> {
+async function upsertJobRecord(body: GeneratePayload, jobId?: string): Promise<string | null> {
   const supabase = createSupabaseServer();
   const {
     data: { user }
@@ -121,7 +101,6 @@ export async function POST(request: NextRequest) {
   try {
     const requestBody = (await request.json()) as GenerateRequestBody;
     const { jobId, ...body } = requestBody;
-    resolveRequestedStatus(body.status);
 
     const templatePath = process.cwd() + "/templates/template.docx";
     const content = await readFile(path.resolve(templatePath), "binary");
@@ -155,10 +134,6 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (err) {
-    if (err instanceof Error && err.message === "status ไม่ถูกต้อง") {
-      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
-    }
-
     return NextResponse.json(
       {
         ok: false,
