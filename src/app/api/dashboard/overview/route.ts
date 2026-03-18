@@ -39,6 +39,10 @@ type StaticSchemaDecision = {
   reason: string;
 };
 
+type ResolveDashboardSchemaOptions = {
+  staticShortCircuitEnabled: boolean;
+};
+
 const resolveStaticDashboardSchemaDecision = (): StaticSchemaDecision => {
   const forceStaticSchema = isEnabledEnvFlag(process.env.DASHBOARD_OVERVIEW_FORCE_STATIC);
   const forceDynamicSchema = isEnabledEnvFlag(process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA);
@@ -136,6 +140,47 @@ const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort
 const hasFreshStaticColumnsCache = (entry: StaticColumnsCache | null): entry is StaticColumnsCache =>
   Boolean(entry && entry.expiresAt > Date.now());
 
+const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+
+const isStaticSchemaShortCircuitEnabled = (): boolean => {
+  const rawValue = process.env.DASHBOARD_OVERVIEW_STATIC_SCHEMA_SHORT_CIRCUIT;
+  if (rawValue === undefined) {
+    return true;
+  }
+  return isEnabledEnvFlag(rawValue);
+};
+
+const canUsePredeclaredStaticColumns = async (
+  supabase: ReturnType<typeof createSupabaseServer>,
+  predeclaredColumns: Set<string>
+): Promise<{ canUse: boolean; reason: string }> => {
+  const missingMinimumColumns = getMissingColumns(predeclaredColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
+  if (missingMinimumColumns.length > 0) {
+    return {
+      canUse: false,
+      reason: `minimum-columns-missing:${missingMinimumColumns.join(",")}`
+    };
+  }
+
+  const { error } = await supabase
+    .from(DASHBOARD_CANONICAL_TABLE)
+    .select(DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES.join(","), { head: true, count: "planned" })
+    .limit(1);
+
+  if (error) {
+    const errorCode = typeof error.code === "string" ? error.code : "unknown";
+    return {
+      canUse: false,
+      reason: `canonical-probe-failed:${errorCode}`
+    };
+  }
+
+  return {
+    canUse: true,
+    reason: "canonical-probe-ok"
+  };
+};
+
 const readCanonicalGeneratedDocsColumns = async (
   supabase: ReturnType<typeof createSupabaseServer>
 ): Promise<Set<string> | null> => {
@@ -204,19 +249,58 @@ const resolveStaticGeneratedDocsColumns = async (
   };
 };
 
-const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabaseServer>): Promise<DashboardSchemaResolution> => {
+const resolveDashboardSchema = async (
+  supabase: ReturnType<typeof createSupabaseServer>,
+  options: ResolveDashboardSchemaOptions
+): Promise<DashboardSchemaResolution> => {
+  const schemaResolveStart = performance.now();
   const staticSchemaDecision = resolveStaticDashboardSchemaDecision();
+  console.info("dashboard-overview-schema-resolve-start");
 
   if (staticSchemaDecision.enabled) {
+    const predeclaredColumns = new Set(DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS);
+    if (options.staticShortCircuitEnabled) {
+      const staticProbeStart = performance.now();
+      const staticProbeResult = await canUsePredeclaredStaticColumns(supabase, predeclaredColumns);
+      console.info(`dashboard-overview-schema-static-probe-end: ${formatDurationMs(performance.now() - staticProbeStart)}`);
+
+      if (staticProbeResult.canUse) {
+        const missingMinimumColumns = getMissingColumns(predeclaredColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
+        const introspectedColumns = toSortedColumnList(predeclaredColumns);
+        console.info("dashboard-overview-static-schema-short-circuit: enabled");
+        console.info("dashboard-overview-schema-cache: skipped");
+        console.info("dashboard-overview-schema-introspection-skipped: static-predeclared-sufficient");
+        console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+
+        return {
+          table: DASHBOARD_CANONICAL_TABLE,
+          availableColumns: predeclaredColumns,
+          introspectedColumns,
+          missingMinimumColumns,
+          schemaMode: "static",
+          staticSchemaDecision
+        };
+      }
+
+      console.info(`dashboard-overview-static-schema-short-circuit: disabled (reason=${staticProbeResult.reason})`);
+      console.info(`dashboard-overview-schema-introspection-attempted: fallback-required (${staticProbeResult.reason})`);
+    } else {
+      console.info("dashboard-overview-static-schema-short-circuit: disabled (reason=flag-off)");
+      console.info("dashboard-overview-schema-introspection-attempted: short-circuit-disabled");
+    }
+
     const { availableColumns: canonicalColumns, source: staticColumnsSource, cacheHit } = await resolveStaticGeneratedDocsColumns(supabase);
     const missingMinimumColumns = getMissingColumns(canonicalColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
     const introspectedColumns = toSortedColumnList(canonicalColumns);
 
-    console.info(`dashboard-overview-static-columns-cache-${cacheHit ? "hit" : "miss"}`);
+    console.info(`dashboard-overview-schema-cache-${cacheHit ? "hit" : "miss"}`);
     console.info(`dashboard-overview-static-columns-source: ${staticColumnsSource}`);
+    console.info("dashboard-overview-schema-introspection-attempted: true");
 
     if (canonicalColumns.size === 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+      console.info("dashboard-overview-schema-fallback-reason: canonical-table-unavailable");
+      console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
       return {
         ...fallbackSchema,
         introspectedColumns,
@@ -229,6 +313,8 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
 
     if (missingMinimumColumns.length > 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+      console.info(`dashboard-overview-schema-fallback-reason: minimum-columns-missing (${missingMinimumColumns.join(",")})`);
+      console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
       return {
         ...fallbackSchema,
         introspectedColumns,
@@ -239,6 +325,7 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
       };
     }
 
+    console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
     return {
       table: DASHBOARD_CANONICAL_TABLE,
       availableColumns: canonicalColumns,
@@ -250,6 +337,10 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
   }
 
   const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+  console.info("dashboard-overview-static-schema-short-circuit: disabled (reason=static-schema-disabled)");
+  console.info("dashboard-overview-schema-introspection-skipped: static-schema-disabled");
+  console.info("dashboard-overview-schema-fallback-reason: static-schema-disabled");
+  console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
   return {
     ...fallbackSchema,
     introspectedColumns: toSortedColumnList(fallbackSchema.availableColumns),
@@ -261,25 +352,28 @@ const resolveDashboardSchema = async (supabase: ReturnType<typeof createSupabase
 };
 
 export async function GET() {
-  console.time("dashboard-overview-route-total");
+  const routeStart = performance.now();
+  console.info("dashboard-overview-route-start");
   try {
     const supabase = createSupabaseServer();
 
-    console.time("dashboard-overview-auth-user");
+    console.info("dashboard-overview-auth-user-start");
+    const authStart = performance.now();
     let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"];
     try {
       ({
         data: { user }
       } = await supabase.auth.getUser());
     } finally {
-      console.timeEnd("dashboard-overview-auth-user");
+      console.info(`dashboard-overview-auth-user-end: ${formatDurationMs(performance.now() - authStart)}`);
     }
 
     if (!user) {
       return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
     }
 
-    console.time("dashboard-overview-resolve-schema");
+    console.info("dashboard-overview-schema-resolve-wrapper-start");
+    const schemaResolveWrapperStart = performance.now();
     let table: string | null;
     let availableColumns: Set<string>;
     let introspectedColumns: string[];
@@ -287,10 +381,13 @@ export async function GET() {
     let schemaMode: DashboardSchemaResolution["schemaMode"];
     let staticSchemaDecision: DashboardSchemaResolution["staticSchemaDecision"];
     let fallbackReason: DashboardSchemaResolution["fallbackReason"];
+    const staticShortCircuitEnabled = isStaticSchemaShortCircuitEnabled();
     try {
-      ({ table, availableColumns, introspectedColumns, missingMinimumColumns, schemaMode, staticSchemaDecision, fallbackReason } = await resolveDashboardSchema(supabase));
+      ({ table, availableColumns, introspectedColumns, missingMinimumColumns, schemaMode, staticSchemaDecision, fallbackReason } = await resolveDashboardSchema(supabase, {
+        staticShortCircuitEnabled
+      }));
     } finally {
-      console.timeEnd("dashboard-overview-resolve-schema");
+      console.info(`dashboard-overview-schema-resolve-wrapper-end: ${formatDurationMs(performance.now() - schemaResolveWrapperStart)}`);
     }
 
     console.info(
@@ -332,34 +429,61 @@ export async function GET() {
       return query;
     };
 
-    console.time("dashboard-overview-summary-query");
+    console.info("dashboard-overview-summary-query-start");
+    const summaryStart = performance.now();
     let total = 0;
     let pending = 0;
     let approved = 0;
     let rejected = 0;
     let completed = 0;
+    let summaryResolvedByRpc = false;
     try {
       if (hasStatusColumn) {
-        const [totalResult, pendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
-          buildCountQuery(),
-          buildCountQuery().in("status", [...PENDING_STATUSES]),
-          buildCountQuery().in("status", [...APPROVED_STATUSES]),
-          buildCountQuery().in("status", [...REJECTED_STATUSES]),
-          buildCountQuery().in("status", [...COMPLETED_STATUSES])
-        ]);
+        const canUseSummaryRpc = table === DASHBOARD_CANONICAL_TABLE && hasUserIdColumn;
+        if (canUseSummaryRpc) {
+          console.info("dashboard-overview-summary-rpc-attempted");
+          const { data: summaryRows, error: summaryRpcError } = await supabase.rpc("dashboard_overview_summary", {
+            p_user_id: user.id
+          });
 
-        const summaryError =
-          totalResult.error ?? pendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
-        if (summaryError) {
-          return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 });
+          if (!summaryRpcError) {
+            const row = Array.isArray(summaryRows) ? summaryRows[0] : null;
+            total = Number(row?.total ?? 0);
+            pending = Number(row?.pending ?? 0);
+            approved = Number(row?.approved ?? 0);
+            rejected = Number(row?.rejected ?? 0);
+            completed = Number(row?.completed ?? 0);
+            summaryResolvedByRpc = true;
+            console.info("dashboard-overview-summary-rpc-used");
+          } else {
+            console.info(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
+          }
         }
 
-        total = totalResult.count ?? 0;
-        pending = pendingResult.count ?? 0;
-        approved = approvedResult.count ?? 0;
-        rejected = rejectedResult.count ?? 0;
-        completed = completedResult.count ?? 0;
+        if (!summaryResolvedByRpc) {
+          const [totalResult, pendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
+            buildCountQuery(),
+            buildCountQuery().in("status", [...PENDING_STATUSES]),
+            buildCountQuery().in("status", [...APPROVED_STATUSES]),
+            buildCountQuery().in("status", [...REJECTED_STATUSES]),
+            buildCountQuery().in("status", [...COMPLETED_STATUSES])
+          ]);
+
+          const summaryError =
+            totalResult.error ?? pendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
+          if (summaryError) {
+            return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 });
+          }
+
+          total = totalResult.count ?? 0;
+          pending = pendingResult.count ?? 0;
+          approved = approvedResult.count ?? 0;
+          rejected = rejectedResult.count ?? 0;
+          completed = completedResult.count ?? 0;
+          console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
+        }
       } else {
+        console.info("dashboard-overview-summary-status-column-missing: total-only");
         const { count: totalCount, error: totalError } = await buildCountQuery();
         if (totalError) {
           return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 });
@@ -367,12 +491,16 @@ export async function GET() {
         total = totalCount ?? 0;
       }
     } finally {
-      console.timeEnd("dashboard-overview-summary-query");
+      console.info(`dashboard-overview-summary-query-end: ${formatDurationMs(performance.now() - summaryStart)}`);
     }
 
-    console.time("dashboard-overview-jobs-query");
+    console.info("dashboard-overview-jobs-query-start");
+    const jobsStart = performance.now();
     let jobs: Record<string, unknown>[] = [];
     try {
+      if (availableColumns.has("payload")) {
+        console.info("dashboard-overview-jobs-payload-column-retained: title-fallback-required");
+      }
       let jobsQuery = supabase.from(table).select(selectedColumns.join(","));
 
       const orderByColumn = availableColumns.has("created_at") ? "created_at" : "id";
@@ -394,10 +522,11 @@ export async function GET() {
           title: resolveTitleWithFallback(job)
         }));
     } finally {
-      console.timeEnd("dashboard-overview-jobs-query");
+      console.info(`dashboard-overview-jobs-query-end: ${formatDurationMs(performance.now() - jobsStart)}`);
     }
 
-    console.time("dashboard-overview-transform");
+    console.info("dashboard-overview-transform-start");
+    const transformStart = performance.now();
     try {
       return NextResponse.json({
         summary: {
@@ -412,9 +541,9 @@ export async function GET() {
         currentUserId: user.id
       });
     } finally {
-      console.timeEnd("dashboard-overview-transform");
+      console.info(`dashboard-overview-transform-end: ${formatDurationMs(performance.now() - transformStart)}`);
     }
   } finally {
-    console.timeEnd("dashboard-overview-route-total");
+    console.info(`dashboard-overview-route-end: ${formatDurationMs(performance.now() - routeStart)}`);
   }
 }
