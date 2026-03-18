@@ -463,6 +463,29 @@
   align-content: start;
 }
 
+.submitHelperText {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.submitWarningText {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
 .toggleRow {
   display: flex;
   justify-content: space-between;
