@@ -89,6 +89,7 @@ const PAYMENT_DONE_STATUS = "ดำเนินการแล้วเสร็
 
 const NEEDS_FIX_STATUS = "needs_fix";
 const PRECHECK_PENDING_STATUS = "precheck_pending";
+const PENDING_REVIEW_STATUS = "pending_review";
 const DOCUMENT_PENDING_STATUS = "document_pending";
 const MAIN_PROCESS_STATUSES = new Set(["main_process", DOCUMENT_PENDING_STATUS, "pending_approval"]);
 const ALLOWED_STATUS_UPDATES = new Set([
@@ -102,6 +103,17 @@ const ALLOWED_STATUS_UPDATES = new Set([
   "paid",
   PAYMENT_DONE_STATUS
 ]);
+const NEEDS_FIX_ALLOWED_RETURN_STATUSES = new Set([PRECHECK_PENDING_STATUS, PENDING_REVIEW_STATUS]);
+
+const resolveRevisionPhaseFromStatus = (status: string): string => {
+  if (status === PRECHECK_PENDING_STATUS) {
+    return "precheck_revision";
+  }
+  if (status === PENDING_REVIEW_STATUS) {
+    return "review_revision";
+  }
+  return "general_revision";
+};
 
 const formatThaiDateTime = (date: Date): string => {
   const datePart = new Intl.DateTimeFormat("th-TH", {
@@ -332,6 +344,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 
   if (action === "mark_payment_done") {
+    if (asTrimmedString(existingJob.status).toLowerCase() === NEEDS_FIX_STATUS) {
+      return NextResponse.json(
+        { message: "ไม่อนุญาตให้เบิกจ่ายจากสถานะ needs_fix โดยตรง" },
+        { status: 400 }
+      );
+    }
+
     try {
       await sendLineGroupNotification(buildPaymentDoneMessage(existingJob, user));
     } catch (lineError) {
@@ -371,7 +390,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       return NextResponse.json({ message: "กรุณาระบุรายการที่ต้องแก้ไขก่อนส่งกลับ" }, { status: 400 });
     }
 
-    const requiredColumns = ["revision_note", "revision_requested_at", "revision_requested_by"];
+    const requiredColumns = [
+      "revision_note",
+      "revision_requested_at",
+      "revision_requested_by",
+      "return_from_status",
+      "revision_phase",
+      "revision_count"
+    ];
     const missingColumns = requiredColumns.filter((column) => !availableColumns.has(column));
     if (missingColumns.length > 0) {
       return NextResponse.json(
@@ -380,13 +406,33 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       );
     }
 
+    const currentStatus = asTrimmedString(existingJob.status);
+    const returnFromStatus = currentStatus || null;
+    const revisionPhase = resolveRevisionPhaseFromStatus(currentStatus);
+    const nextRevisionCount = Number.isFinite(Number(existingJob.revision_count))
+      ? Number(existingJob.revision_count) + 1
+      : 1;
     const nowIso = new Date().toISOString();
     const updates: Record<string, unknown> = {
       status: NEEDS_FIX_STATUS,
       revision_note: revisionNote,
       revision_requested_at: nowIso,
-      revision_requested_by: user.id
+      revision_requested_by: user.id,
+      return_from_status: returnFromStatus,
+      revision_phase: revisionPhase,
+      revision_count: nextRevisionCount
     };
+
+    console.info("[jobs.patch] transition to needs_fix", {
+      jobId: params.id,
+      currentStatus,
+      requestedNextStatus: NEEDS_FIX_STATUS,
+      resolvedNextStatus: NEEDS_FIX_STATUS,
+      returnFromStatusBefore: asTrimmedString(existingJob.return_from_status) || null,
+      returnFromStatusAfter: returnFromStatus,
+      revisionPhase,
+      revisionCount: nextRevisionCount
+    });
 
     let updateQuery = supabase.from(table).update(updates).eq("id", params.id).select("*").limit(1);
     if (availableColumns.has("user_id")) {
@@ -432,6 +478,42 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ message: `ไม่รองรับสถานะ ${nextStatus}` }, { status: 400 });
   }
 
+  const currentStatus = asTrimmedString(existingJob.status);
+  const returnFromStatusBefore = asTrimmedString(existingJob.return_from_status);
+  const normalizedCurrentStatus = currentStatus.toLowerCase();
+  const normalizedNextStatus = nextStatus.toLowerCase();
+
+  if (normalizedCurrentStatus === NEEDS_FIX_STATUS) {
+    const resolvedAllowedStatus = returnFromStatusBefore.toLowerCase();
+    const hasKnownReturnStatus = NEEDS_FIX_ALLOWED_RETURN_STATUSES.has(resolvedAllowedStatus);
+
+    if (!hasKnownReturnStatus && (normalizedNextStatus === "awaiting_payment" || normalizedNextStatus === "completed")) {
+      console.warn("[jobs.patch] rejected invalid needs_fix transition", {
+        jobId: params.id,
+        currentStatus,
+        requestedNextStatus: nextStatus,
+        returnFromStatusBefore: returnFromStatusBefore || null
+      });
+      return NextResponse.json(
+        { message: "ไม่อนุญาตให้ข้ามขั้นจาก needs_fix ไป awaiting_payment หรือ completed โดยตรง" },
+        { status: 400 }
+      );
+    }
+
+    if (hasKnownReturnStatus && normalizedNextStatus !== resolvedAllowedStatus) {
+      console.warn("[jobs.patch] rejected needs_fix transition not matching return_from_status", {
+        jobId: params.id,
+        currentStatus,
+        requestedNextStatus: nextStatus,
+        returnFromStatusBefore
+      });
+      return NextResponse.json(
+        { message: `งานนี้ต้องย้อนกลับไปสถานะ ${returnFromStatusBefore} ตามบริบทการส่งแก้ไข` },
+        { status: 400 }
+      );
+    }
+  }
+
   const previousStatusNormalized = asTrimmedString(existingJob.status).toLowerCase();
   const nextStatusNormalized = nextStatus.toLowerCase();
   const shouldSendPrecheckApprovedLine =
@@ -439,7 +521,28 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     MAIN_PROCESS_STATUSES.has(nextStatusNormalized) &&
     previousStatusNormalized !== nextStatusNormalized;
 
-  let updateQuery = supabase.from(table).update({ status: nextStatus }).eq("id", params.id).select("*").limit(1);
+  const updates: Record<string, unknown> = { status: nextStatus };
+  if (normalizedCurrentStatus === NEEDS_FIX_STATUS && normalizedNextStatus !== NEEDS_FIX_STATUS) {
+    if (availableColumns.has("return_from_status")) {
+      updates.return_from_status = null;
+    }
+    if (availableColumns.has("revision_phase")) {
+      updates.revision_phase = null;
+    }
+  }
+
+  console.info("[jobs.patch] transition request", {
+    jobId: params.id,
+    currentStatus,
+    requestedNextStatus: nextStatus,
+    resolvedNextStatus: nextStatus,
+    returnFromStatusBefore: returnFromStatusBefore || null,
+    returnFromStatusAfter: updates.return_from_status ?? (returnFromStatusBefore || null),
+    revisionPhase: updates.revision_phase ?? (asTrimmedString(existingJob.revision_phase) || null),
+    revisionCount: Number.isFinite(Number(existingJob.revision_count)) ? Number(existingJob.revision_count) : 0
+  });
+
+  let updateQuery = supabase.from(table).update(updates).eq("id", params.id).select("*").limit(1);
   if (availableColumns.has("user_id")) {
     updateQuery = updateQuery.eq("user_id", user.id);
   }

@@ -193,6 +193,17 @@ const readThaiBaht = (value: number): string => {
 
 const PRECHECK_DEBUG_PREFIX = "[precheck-line][client]";
 const GEN_DOCX_ENDPOINT = "/api/gen-docx";
+const NEEDS_FIX_STATUS = "needs_fix";
+
+const getRevisionOriginNotice = (returnFromStatus: string): string => {
+  if (returnFromStatus === "precheck_pending") {
+    return "ส่งกลับแก้ไขจากการตรวจเบื้องต้น";
+  }
+  if (returnFromStatus === "pending_review") {
+    return "ส่งกลับแก้ไขจากการตรวจรอบสุดท้าย";
+  }
+  return "ส่งกลับแก้ไข";
+};
 
 export default function GenerateClient() {
   const router = useRouter();
@@ -218,6 +229,10 @@ export default function GenerateClient() {
   const [items, setItems] = useState<ItemForm[]>([createEmptyItem()]);
   const [loading, setLoading] = useState(false);
   const [loadingJob, setLoadingJob] = useState(false);
+  const [editingJobStatus, setEditingJobStatus] = useState("");
+  const [returnFromStatus, setReturnFromStatus] = useState("");
+  const [revisionPhase, setRevisionPhase] = useState("");
+  const [revisionCount, setRevisionCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
@@ -256,6 +271,10 @@ export default function GenerateClient() {
 
         const job = json.job ?? {};
         const payload = typeof job.payload === "object" && job.payload ? (job.payload as Record<string, unknown>) : job;
+        setEditingJobStatus(typeof job.status === "string" ? job.status.trim() : "");
+        setReturnFromStatus(typeof job.return_from_status === "string" ? job.return_from_status.trim() : "");
+        setRevisionPhase(typeof job.revision_phase === "string" ? job.revision_phase.trim() : "");
+        setRevisionCount(typeof job.revision_count === "number" ? job.revision_count : Number.isFinite(Number(job.revision_count)) ? Number(job.revision_count) : null);
 
         setDepartment(typeof payload.department === "string" ? payload.department : "");
         setSubject(typeof payload.subject === "string" ? payload.subject : "");
@@ -852,6 +871,15 @@ export default function GenerateClient() {
         </div>
 
         {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
+        {editingJobId && editingJobStatus === NEEDS_FIX_STATUS ? (
+          <div className={styles.revisionNotice}>
+            <p className={styles.revisionNoticeTitle}>{getRevisionOriginNotice(returnFromStatus)}</p>
+            <p className={styles.revisionNoticeMeta}>
+              {revisionPhase ? `โหมดการแก้ไข: ${revisionPhase}` : "โหมดการแก้ไข: ไม่ระบุ"}
+              {typeof revisionCount === "number" ? ` • ครั้งที่ ${revisionCount}` : ""}
+            </p>
+          </div>
+        ) : null}
 
         <form
           onSubmit={(event) => {
