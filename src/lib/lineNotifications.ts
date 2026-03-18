@@ -203,3 +203,31 @@ export const buildPrecheckPendingLineMessage = (input: {
     `🔗 ${input.jobUrl}`
   ].join("\n");
 };
+
+export const buildPrecheckApprovedLineMessage = (input: {
+  payload: unknown;
+  assigneeName?: string;
+  requesterName?: string;
+  requesterDisplayName?: string;
+  requesterEmail?: string;
+  approvedAt: Date;
+  jobUrl: string;
+}): string => {
+  const jobTitle = resolveJobTitle(input.payload);
+  const assigneeDisplayName = resolvePrecheckAssigneeDisplayName(input);
+  const netTotal = resolveNetTotalFromPayload(input.payload);
+  const approvedAtThai = formatThaiDateTimeWithWeekdayBE(input.approvedAt);
+
+  return [
+    "🟢 ตรวจสอบเบื้องต้นผ่านแล้ว",
+    "",
+    `📄 งาน: ${jobTitle}`,
+    `👤 ผู้ได้รับมอบหมาย: ${assigneeDisplayName}`,
+    `💰 วงเงิน: ${netTotal} บาท`,
+    `⏰ เวลา: ${approvedAtThai}`,
+    "",
+    "✅ สามารถนำเสนอเพื่ออนุมัติต่อไป",
+    "",
+    `🔗 ${input.jobUrl}`
+  ].join("\n");
+};
