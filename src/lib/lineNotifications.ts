@@ -132,6 +132,45 @@ export const resolveRequesterName = (user: { email?: string | null; user_metadat
   );
 };
 
+export const resolveRequesterProfile = (user: { email?: string | null; user_metadata?: Record<string, unknown> | null } | null) => ({
+  requesterName: resolveRequesterName(user),
+  requesterDisplayName:
+    asTrimmedString(user?.user_metadata?.display_name) ||
+    asTrimmedString(user?.user_metadata?.full_name) ||
+    asTrimmedString(user?.user_metadata?.name),
+  requesterEmail: asTrimmedString(user?.email)
+});
+
+const resolvePrecheckAssigneeDisplayName = (input: {
+  payload: unknown;
+  assigneeName?: string;
+  requesterName?: string;
+  requesterDisplayName?: string;
+  requesterEmail?: string;
+}): string => {
+  const payload = parsePayload(input.payload);
+
+  return (
+    // Prefer "ผู้ได้รับมอบหมาย" from form payload first.
+    asTrimmedString(payload.assignee) ||
+    asTrimmedString(payload.assignee_name) ||
+    asTrimmedString(payload.assigned_to_name) ||
+    asTrimmedString(payload.assignedToName) ||
+    asTrimmedString(payload.receiver_name) ||
+    asTrimmedString(payload.recipient_name) ||
+    asTrimmedString(payload.delegate_name) ||
+    asTrimmedString(payload.owner_name) ||
+    // Then fallback to normalized assignee name mapped from caller.
+    asTrimmedString(input.assigneeName) ||
+    // Then requester/display name alternatives.
+    asTrimmedString(input.requesterName) ||
+    asTrimmedString(input.requesterDisplayName) ||
+    // Email should be the very last real value.
+    asTrimmedString(input.requesterEmail) ||
+    "(ไม่ระบุชื่อ)"
+  );
+};
+
 export const resolveNetTotalFromPayload = (payload: unknown): string => {
   const parsed = parsePayload(payload);
   const total = calculateNetTotalFromPayload(parsed);
@@ -140,11 +179,15 @@ export const resolveNetTotalFromPayload = (payload: unknown): string => {
 
 export const buildPrecheckPendingLineMessage = (input: {
   payload: unknown;
-  requesterName: string;
+  assigneeName?: string;
+  requesterName?: string;
+  requesterDisplayName?: string;
+  requesterEmail?: string;
   createdAt: Date;
   jobUrl: string;
 }): string => {
   const jobTitle = resolveJobTitle(input.payload);
+  const assigneeDisplayName = resolvePrecheckAssigneeDisplayName(input);
   const netTotal = resolveNetTotalFromPayload(input.payload);
   const createdAtThai = formatThaiDateTimeWithWeekdayBE(input.createdAt);
 
@@ -152,7 +195,7 @@ export const buildPrecheckPendingLineMessage = (input: {
     "🟡 มีงานรอตรวจเบื้องต้น",
     "",
     `📄 งาน: ${jobTitle}`,
-    `👤 ผู้สร้าง: ${input.requesterName}`,
+    `👤 ผู้ได้รับมอบหมาย: ${assigneeDisplayName}`,
     `💰 วงเงิน: ${netTotal} บาท`,
     `⏰ เวลา: ${createdAtThai}`,
     "",
