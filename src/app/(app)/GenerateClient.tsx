@@ -191,6 +191,9 @@ const readThaiBaht = (value: number): string => {
   return `${baht}${toThaiNumber(satangValue)}สตางค์`;
 };
 
+const PRECHECK_DEBUG_PREFIX = "[precheck-line][client]";
+const GEN_DOCX_ENDPOINT = "/api/gen-docx";
+
 export default function GenerateClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -652,6 +655,12 @@ export default function GenerateClient() {
   };
 
   const handleSubmit = async (mode: SubmissionMode = "main") => {
+    if (mode === "precheck") {
+      console.info(`${PRECHECK_DEBUG_PREFIX} precheck button clicked`, {
+        mode
+      });
+    }
+
     const errors = validateForm();
     const missingSpecs = getMissingSpecRows(items);
     setValidationErrors(errors);
@@ -711,7 +720,17 @@ export default function GenerateClient() {
 
       const requestBody = editingJobId ? { ...payload, jobId: editingJobId, submissionMode: mode } : { ...payload, submissionMode: mode };
 
-      const response = await fetch("/api/gen-docx", {
+      if (mode === "precheck") {
+        console.info(`${PRECHECK_DEBUG_PREFIX} sending request`, {
+          endpoint: GEN_DOCX_ENDPOINT,
+          submissionMode: requestBody.submissionMode,
+          jobId: typeof requestBody.jobId === "string" ? requestBody.jobId : null,
+          existingJobId: editingJobId || null,
+          status: null
+        });
+      }
+
+      const response = await fetch(GEN_DOCX_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
