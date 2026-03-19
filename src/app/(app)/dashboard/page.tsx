@@ -4,8 +4,11 @@ import { Suspense } from "react";
 import DashboardJobsSection, { DashboardJobsSectionFallback } from "./DashboardJobsSection";
 
 export default function DashboardPage() {
+  const shouldLogPerf = process.env.NODE_ENV === "development";
   const startedAt = performance.now();
-  console.info("[dashboard-rsc] page-render-start");
+  if (shouldLogPerf) {
+    console.info("[dashboard-perf] route-render-start route=/dashboard");
+  }
   try {
     return (
       <section className="relative min-h-[calc(100vh-4rem)] overflow-hidden bg-[var(--bg)] px-4 py-8 sm:px-6 sm:py-10">
@@ -46,6 +49,8 @@ export default function DashboardPage() {
       </section>
     );
   } finally {
-    console.info(`[dashboard-rsc] page-render-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+    if (shouldLogPerf) {
+      console.info(`[dashboard-perf] route-render-end route=/dashboard duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+    }
   }
 }

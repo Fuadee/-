@@ -18,33 +18,49 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "status",
   "user_id"
 ] as const;
+const isDashboardPerfLogEnabled = process.env.NODE_ENV === "development";
+const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+const logDashboardPerf = (message: string): void => {
+  if (!isDashboardPerfLogEnabled) {
+    return;
+  }
+
+  console.info(message);
+};
+const createDashboardPerfTimer = (name: string): (() => void) => {
+  const startedAt = performance.now();
+  logDashboardPerf(`[dashboard-perf] ${name}-start`);
+  return () => {
+    logDashboardPerf(`[dashboard-perf] ${name}-end duration=${formatDurationMs(performance.now() - startedAt)}`);
+  };
+};
 
 export async function GET() {
-  console.time("dashboard-summary-route-total");
+  const endRoute = createDashboardPerfTimer("api-dashboard-summary-route");
   try {
     const supabase = createSupabaseServer();
 
-    console.time("dashboard-summary-auth-user");
+    const endAuth = createDashboardPerfTimer("api-dashboard-summary-auth");
     let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"];
     try {
       ({
         data: { user }
       } = await supabase.auth.getUser());
     } finally {
-      console.timeEnd("dashboard-summary-auth-user");
+      endAuth();
     }
 
     if (!user) {
       return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
     }
 
-    console.time("dashboard-summary-resolve-schema");
+    const endResolveSchema = createDashboardPerfTimer("api-dashboard-summary-schema-resolve");
     let table: string | null;
     let availableColumns: Set<string>;
     try {
       ({ table, availableColumns } = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES));
     } finally {
-      console.timeEnd("dashboard-summary-resolve-schema");
+      endResolveSchema();
     }
 
     if (!table) {
@@ -66,13 +82,13 @@ export async function GET() {
       query = query.eq("user_id", user.id);
     }
 
-    console.time("dashboard-summary-query");
+    const endSummaryQuery = createDashboardPerfTimer("api-dashboard-summary-query");
     let data: unknown[] | null;
     let error: { message: string } | null;
     try {
       ({ data, error } = await query);
     } finally {
-      console.timeEnd("dashboard-summary-query");
+      endSummaryQuery();
     }
 
     if (error) {
@@ -86,6 +102,7 @@ export async function GET() {
     let needsFixCount = 0;
     let completedCount = 0;
 
+    const endSummaryTransform = createDashboardPerfTimer("api-dashboard-summary-transform-counts");
     for (const job of allJobs) {
       if (isCompletedStatus(job.status)) {
         completedCount += 1;
@@ -104,6 +121,7 @@ export async function GET() {
         needsFixCount += 1;
       }
     }
+    endSummaryTransform();
 
     return NextResponse.json({
       summary: {
@@ -117,6 +135,6 @@ export async function GET() {
       currentUserId: user.id
     });
   } finally {
-    console.timeEnd("dashboard-summary-route-total");
+    endRoute();
   }
 }

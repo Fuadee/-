@@ -244,6 +244,25 @@ const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
   isRemoving: false
 });
 
+const shouldLogDashboardPerf = process.env.NODE_ENV === "development";
+const logDashboardPerf = (message: string): void => {
+  if (!shouldLogDashboardPerf) {
+    return;
+  }
+
+  console.info(message);
+};
+
+const measureDashboardPerf = <T,>(label: string, runner: () => T): T => {
+  const startedAt = performance.now();
+  logDashboardPerf(`[dashboard-perf] ${label}-start`);
+  try {
+    return runner();
+  } finally {
+    logDashboardPerf(`[dashboard-perf] ${label}-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+  }
+};
+
 export default function DashboardJobList({
   jobs,
   hasUserIdColumn,
@@ -251,7 +270,9 @@ export default function DashboardJobList({
   initialCompletedCount,
   hasMoreInitialJobs
 }: DashboardJobListProps) {
-  const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
+  const [items, setItems] = useState<DashboardJobItem[]>(() =>
+    measureDashboardPerf("jobs-list-transform-initial-map", () => jobs.map(toDashboardItem))
+  );
   const [hasMoreActiveItems, setHasMoreActiveItems] = useState(hasMoreInitialJobs);
   const [isLoadingMoreActive, setIsLoadingMoreActive] = useState(false);
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
@@ -273,7 +294,7 @@ export default function DashboardJobList({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setItems(jobs.map(toDashboardItem));
+    setItems(measureDashboardPerf("jobs-list-transform-props-map", () => jobs.map(toDashboardItem)));
     setHasMoreActiveItems(hasMoreInitialJobs);
   }, [hasMoreInitialJobs, jobs]);
 
@@ -300,10 +321,13 @@ export default function DashboardJobList({
     setCompletedError(null);
 
     try {
+      const fetchStartedAt = performance.now();
+      logDashboardPerf("[dashboard-perf] summary-fetch-completed-start");
       const response = await fetch("/api/dashboard/completed", {
         method: "GET",
         cache: "no-store"
       });
+      logDashboardPerf(`[dashboard-perf] summary-fetch-completed-end duration=${(performance.now() - fetchStartedAt).toFixed(3)}ms`);
 
       const payload = (await response.json()) as CompletedJobsResponse | { message?: string };
 
@@ -312,7 +336,9 @@ export default function DashboardJobList({
         throw new Error(message);
       }
 
-      setCompletedItemsCache((payload as CompletedJobsResponse).jobs.map(toDashboardItem));
+      setCompletedItemsCache(
+        measureDashboardPerf("summary-render-completed-map", () => (payload as CompletedJobsResponse).jobs.map(toDashboardItem))
+      );
     } catch (err) {
       setCompletedError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
     } finally {
@@ -338,17 +364,21 @@ export default function DashboardJobList({
 
     setIsLoadingMoreActive(true);
     try {
+      const fetchStartedAt = performance.now();
+      logDashboardPerf("[dashboard-perf] jobs-fetch-load-more-start");
       const response = await fetch("/api/dashboard/jobs", {
         method: "GET",
         cache: "no-store"
       });
+      logDashboardPerf(`[dashboard-perf] jobs-fetch-load-more-end duration=${(performance.now() - fetchStartedAt).toFixed(3)}ms`);
 
       const payload = (await response.json()) as { jobs?: JobRecord[]; message?: string };
       if (!response.ok || !Array.isArray(payload.jobs)) {
         throw new Error(payload.message ?? "โหลดรายการงานเพิ่มเติมไม่สำเร็จ");
       }
 
-      const nextItems = payload.jobs.map(toDashboardItem);
+      const jobsPayload = payload.jobs;
+      const nextItems = measureDashboardPerf("jobs-transform-load-more-map", () => jobsPayload.map(toDashboardItem));
       setItems(nextItems);
       setHasMoreActiveItems(false);
     } catch (error) {
