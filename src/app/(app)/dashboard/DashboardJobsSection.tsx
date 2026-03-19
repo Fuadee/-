@@ -31,7 +31,7 @@ export default async function DashboardJobsSection() {
 
 export function DashboardJobsSectionFallback() {
   return (
-    <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
+    <div className="mt-2 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[var(--soft-shadow)]">
       <div className="grid gap-3 border-b border-[color:var(--border)] bg-white px-5 py-4 sm:hidden">
         {Array.from({ length: 2 }).map((_, index) => (
           <div key={index} className="rounded-2xl border border-slate-100 p-4">
@@ -44,15 +44,15 @@ export function DashboardJobsSectionFallback() {
           </div>
         ))}
       </div>
-      <div className="hidden grid-cols-12 gap-3 border-b border-[color:var(--border)] bg-purple-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
+      <div className="hidden grid-cols-12 gap-3 border-b border-gray-100 bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
         <p className="col-span-5">ชื่องาน</p>
         <p className="col-span-3">สร้างเมื่อ</p>
         <p className="col-span-2">สถานะ</p>
         <p className="col-span-2 text-right">การทำงาน</p>
       </div>
-      <div className="hidden divide-y divide-slate-100 sm:block">
+      <div className="hidden sm:block">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="grid gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
+          <div key={index} className="grid gap-4 border-b border-gray-100 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
             <div className="space-y-2 sm:col-span-5">
               <div className="skeleton-shimmer h-4 w-5/6 rounded" />
               <div className="skeleton-shimmer h-3 w-1/3 rounded" />

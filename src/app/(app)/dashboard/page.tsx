@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import DashboardJobsSection, { DashboardJobsSectionFallback } from "./DashboardJobsSection";
-import DashboardSummarySection, { DashboardSummarySectionFallback } from "./DashboardSummarySection";
 
 export default function DashboardPage() {
   const startedAt = performance.now();
@@ -27,7 +26,7 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href="/"
-                className="focus-ring inline-flex items-center rounded-xl bg-[image:var(--accent-glow)] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_26px_rgba(147,51,234,0.34)] transition hover:brightness-105 active:translate-y-px"
+                className="focus-ring inline-flex items-center rounded-xl bg-[image:var(--accent-glow)] px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(147,51,234,0.24)] transition duration-200 hover:scale-[1.02] hover:brightness-105 active:translate-y-px"
               >
                 ไปหน้า Generate
               </Link>
@@ -39,10 +38,6 @@ export default function DashboardPage() {
               </Link>
             </div>
           </div>
-
-          <Suspense fallback={<DashboardSummarySectionFallback />}>
-            <DashboardSummarySection />
-          </Suspense>
 
           <Suspense fallback={<DashboardJobsSectionFallback />}>
             <DashboardJobsSection />

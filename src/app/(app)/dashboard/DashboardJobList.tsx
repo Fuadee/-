@@ -592,28 +592,28 @@ export default function DashboardJobList({
 
   return (
     <>
-      <div className="mb-4 inline-flex rounded-full border border-slate-200 bg-slate-100/60 p-1 transition duration-200">
+      <div className="mt-6 mb-4 flex gap-2 border-b border-gray-200">
         <button
           type="button"
           onClick={() => handleTabChange("active")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition duration-200 ${
+          className={`px-4 py-2 text-sm transition ${
             currentTab === "active"
-              ? "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "border-b-2 border-purple-500 font-semibold text-gray-900"
+              : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          กำลังดำเนินการ ({activeItems.length})
+          กำลังดำเนินการ
         </button>
         <button
           type="button"
           onClick={() => handleTabChange("completed")}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition duration-200 ${
+          className={`px-4 py-2 text-sm transition ${
             currentTab === "completed"
-              ? "bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 text-white shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
+              ? "border-b-2 border-purple-500 font-semibold text-gray-900"
+              : "text-gray-500 hover:text-gray-700"
           }`}
         >
-          งานที่เสร็จแล้ว ({completedCount})
+          งานที่เสร็จแล้ว
         </button>
       </div>
       {currentTab === "active" ? (
@@ -625,7 +625,7 @@ export default function DashboardJobList({
               activeFilter === "all" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            ทั้งหมด ({activeItems.length})
+            ทั้งหมด
           </button>
           <button
             type="button"
@@ -636,7 +636,7 @@ export default function DashboardJobList({
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
             }`}
           >
-            กระบวนการหลัก ({mainFlowItems.length})
+            กระบวนการหลัก
           </button>
           <button
             type="button"
@@ -647,13 +647,13 @@ export default function DashboardJobList({
                 : "border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
             }`}
           >
-            รอตรวจเบื้องต้น ({precheckItems.length})
+            รอตรวจเบื้องต้น
           </button>
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-3xl border border-[color:var(--border)] bg-white shadow-[var(--soft-shadow)]">
-        <div className="hidden grid-cols-12 gap-3 border-b border-[color:var(--border)] bg-purple-50/60 px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
+      <div className="mt-2 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[var(--soft-shadow)]">
+        <div className="hidden grid-cols-12 gap-3 border-b border-gray-100 bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
           <p className="col-span-5">ชื่องาน</p>
           <p className="col-span-3">สร้างเมื่อ</p>
           <p className="col-span-2">สถานะ</p>
@@ -661,9 +661,9 @@ export default function DashboardJobList({
         </div>
 
         {isCompletedLoading && currentTab === "completed" ? (
-          <div className="divide-y divide-slate-100">
+          <div>
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="grid gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
+              <div key={index} className="grid gap-4 border-b border-gray-100 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
                 <div className="skeleton-shimmer h-4 rounded sm:col-span-5" />
                 <div className="skeleton-shimmer h-4 rounded sm:col-span-3" />
                 <div className="skeleton-shimmer h-4 rounded sm:col-span-2" />
@@ -672,7 +672,7 @@ export default function DashboardJobList({
             ))}
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div>
             {tableItems.map((job) => {
               const status = normalizeStatus(job.status);
               const id = String(job.id ?? "");
@@ -682,11 +682,10 @@ export default function DashboardJobList({
               return (
                 <div
                   key={id}
-                  className={`group relative grid gap-4 px-5 py-4 transition-all duration-250 ease-out hover:bg-purple-50/50 sm:grid-cols-12 sm:items-center sm:px-6 ${
+                  className={`group relative grid gap-4 border-b border-gray-100 px-5 py-4 transition duration-200 hover:bg-gray-50 sm:grid-cols-12 sm:items-center sm:px-6 ${
                     job.isRemoving ? "pointer-events-none translate-y-0.5 opacity-0" : ""
                   }`}
                 >
-                  <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
                   <div className="sm:col-span-5">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
                     <div className="flex flex-col space-y-0.5">
