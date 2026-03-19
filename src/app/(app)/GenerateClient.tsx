@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Maximize2, SearchIcon } from "lucide-react";
+import { Maximize2 } from "lucide-react";
 import {
   buildPaymentBudgetDocText,
   getOperatingCostCenter,
@@ -1692,10 +1692,7 @@ export default function GenerateClient() {
                           {loading ? (
                             <span className={styles.buttonContent}>กำลังบันทึก...</span>
                           ) : (
-                            <span className={styles.buttonContent}>
-                              <SearchIcon size={16} aria-hidden />
-                              ตรวจสอบก่อนส่ง
-                            </span>
+                            <span className={styles.buttonContent}>ตรวจสอบก่อนส่ง</span>
                           )}
                         </button>
                         <p className={`${styles.actionHelperText} ${styles.precheckHelperText}`}>
