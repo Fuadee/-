@@ -34,7 +34,14 @@ const DASHBOARD_JOBS_FIELD_CANDIDATES = [
   "status",
   "tax_id",
   "payload",
-  "user_id"
+  "user_id",
+  "assignee_name",
+  "assignee_id",
+  "assignee",
+  "assigned_to",
+  "assigned_to_name",
+  "requester_name",
+  "created_by"
 ] as const;
 const DASHBOARD_FETCH_MODE = "direct-data-access";
 const DASHBOARD_SUMMARY_REVALIDATE_SECONDS = 10;

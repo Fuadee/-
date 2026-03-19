@@ -40,11 +40,17 @@ type NeedsFixDialogState = {
   title: string;
 } | null;
 
-type JobPayload = {
+type JobPayload = Record<string, unknown> & {
   subject_detail?: unknown;
   vendor_name?: unknown;
   tax_id?: unknown;
   items?: unknown;
+  department?: unknown;
+  assignee?: unknown;
+  assignee_name?: unknown;
+  assigned_to?: unknown;
+  assigned_to_name?: unknown;
+  requester_name?: unknown;
 };
 
 type CompletedJobsResponse = {
@@ -67,23 +73,48 @@ const formatDate = (value: unknown) => {
   }).format(date);
 };
 
-const getCreatorName = (job: JobRecord): string => {
-  const directName = asTrimmedString(job.created_by_name);
-  if (directName) {
-    return directName;
+const getJobPeopleAndDepartment = (job: JobRecord): {
+  primaryPerson: string;
+  department: string;
+} => {
+  const payload = parseJobPayload(job.payload);
+
+  const assignee =
+    asTrimmedString(job.assignee_name) ||
+    asTrimmedString(job.assigned_to_name) ||
+    asTrimmedString(job.assigned_to) ||
+    asTrimmedString(job.assignee) ||
+    asTrimmedString(payload.assignee) ||
+    asTrimmedString(payload.assignee_name) ||
+    asTrimmedString(payload.assigned_to_name) ||
+    asTrimmedString(payload.assigned_to);
+
+  const creator =
+    asTrimmedString(job.created_by_name) ||
+    asTrimmedString(job.requester_name) ||
+    asTrimmedString(job.created_by) ||
+    asTrimmedString(payload.requester_name);
+
+  const department = asTrimmedString(job.department) || asTrimmedString(payload.department) || "ไม่ระบุแผนก";
+
+  if (assignee) {
+    return {
+      primaryPerson: assignee,
+      department
+    };
   }
 
-  const assigneeName = asTrimmedString(job.assignee_name);
-  if (assigneeName) {
-    return assigneeName;
+  if (creator) {
+    return {
+      primaryPerson: creator,
+      department
+    };
   }
 
-  return "ไม่ระบุผู้สร้าง";
-};
-
-const getDepartmentName = (job: JobRecord): string => {
-  const department = asTrimmedString(job.department);
-  return department || "ไม่ระบุแผนก";
+  return {
+    primaryPerson: "ไม่ระบุผู้รับผิดชอบ",
+    department
+  };
 };
 
 const formatJobCode = (jobId: unknown): string => {
@@ -646,6 +677,7 @@ export default function DashboardJobList({
               const status = normalizeStatus(job.status);
               const id = String(job.id ?? "");
               const isCompletedTab = currentTab === "completed";
+              const metadata = getJobPeopleAndDepartment(job);
 
               return (
                 <div
@@ -660,7 +692,7 @@ export default function DashboardJobList({
                     <div className="flex flex-col space-y-0.5">
                       <p className="text-sm font-semibold text-gray-900">{getJobTitle(job)}</p>
                       <p className="text-xs text-gray-500">
-                        {getCreatorName(job)} • {getDepartmentName(job)}
+                        {metadata.primaryPerson} • {metadata.department}
                       </p>
                       <p className="text-xs text-gray-400" title={`เลขที่งาน: ${formatJobCode(id)}`}>
                         {formatJobCode(id)}

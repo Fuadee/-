@@ -13,7 +13,14 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "status",
   "tax_id",
   "payload",
-  "user_id"
+  "user_id",
+  "assignee_name",
+  "assignee_id",
+  "assignee",
+  "assigned_to",
+  "assigned_to_name",
+  "requester_name",
+  "created_by"
 ] as const;
 
 const asUserId = (value: unknown): string | null => {
