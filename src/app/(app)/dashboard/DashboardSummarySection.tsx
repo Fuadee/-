@@ -34,8 +34,8 @@ export function DashboardSummarySectionFallback() {
     <div className="mb-6 grid gap-3 sm:grid-cols-5">
       {Array.from({ length: 5 }).map((_, index) => (
         <div key={index} className="rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-[var(--soft-shadow)]">
-          <div className="h-4 w-20 animate-pulse rounded bg-slate-100" />
-          <div className="mt-2 h-8 w-12 animate-pulse rounded bg-slate-100" />
+          <div className="skeleton-shimmer h-4 w-20 rounded" />
+          <div className="mt-2 skeleton-shimmer h-8 w-12 rounded" />
         </div>
       ))}
     </div>
