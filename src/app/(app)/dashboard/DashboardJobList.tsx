@@ -724,12 +724,15 @@ export default function DashboardJobList({
                       <>
                         <Link
                           href={`/?job=${encodeURIComponent(id)}`}
+                          // Disable Next.js auto-prefetch for per-job links to prevent N+1 background requests on dashboard render.
+                          prefetch={false}
                           className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
                         >
                           ดูรายละเอียด
                         </Link>
                         <Link
                           href={`/?job=${encodeURIComponent(id)}`}
+                          prefetch={false}
                           className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                         >
                           แก้ไข (สร้างเวอร์ชันใหม่)
@@ -748,12 +751,14 @@ export default function DashboardJobList({
                         ) : null}
                         <Link
                           href={`/?job=${encodeURIComponent(id)}`}
+                          prefetch={false}
                           className="focus-ring rounded-lg px-2 py-1 text-sm font-semibold text-purple-700 underline decoration-purple-300 decoration-2 underline-offset-4 transition hover:text-purple-900"
                         >
                           {status === "precheck_pending" ? "ดูรายละเอียด" : status === "document_pending" ? "สร้างเอกสาร" : "แก้ไขงานนี้ →"}
                         </Link>
                         <Link
                           href={`/dashboard/${encodeURIComponent(id)}`}
+                          prefetch={false}
                           className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                         >
                           {status === "precheck_pending" ? "เปิดหน้างาน" : status === "document_pending" ? "รายละเอียดงาน" : "ดูรายละเอียด"}
