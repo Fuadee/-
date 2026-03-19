@@ -142,6 +142,13 @@ const hasFreshStaticColumnsCache = (entry: StaticColumnsCache | null): entry is 
   Boolean(entry && entry.expiresAt > Date.now());
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+const createPerfStepLogger = (name: string): (() => void) => {
+  const start = performance.now();
+  console.info(`${name}-start`);
+  return () => {
+    console.info(`${name}-end: ${formatDurationMs(performance.now() - start)}`);
+  };
+};
 
 const isStaticSchemaShortCircuitEnabled = (): boolean => {
   const rawValue = process.env.DASHBOARD_OVERVIEW_STATIC_SCHEMA_SHORT_CIRCUIT;
@@ -353,28 +360,27 @@ const resolveDashboardSchema = async (
 };
 
 export async function GET() {
-  const routeStart = performance.now();
-  console.info("dashboard-overview-route-start");
+  const endRoute = createPerfStepLogger("dashboard-overview-route");
   try {
+    const endSupabaseClientInit = createPerfStepLogger("dashboard-overview-supabase-client-init");
     const supabase = createSupabaseServer();
+    endSupabaseClientInit();
 
-    console.info("dashboard-overview-auth-user-start");
-    const authStart = performance.now();
+    const endAuthUser = createPerfStepLogger("dashboard-overview-auth-user");
     let user: Awaited<ReturnType<typeof supabase.auth.getUser>>["data"]["user"];
     try {
       ({
         data: { user }
       } = await supabase.auth.getUser());
     } finally {
-      console.info(`dashboard-overview-auth-user-end: ${formatDurationMs(performance.now() - authStart)}`);
+      endAuthUser();
     }
 
     if (!user) {
       return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
     }
 
-    console.info("dashboard-overview-schema-resolve-wrapper-start");
-    const schemaResolveWrapperStart = performance.now();
+    const endSchemaResolveWrapper = createPerfStepLogger("dashboard-overview-schema-resolve-wrapper");
     let table: string | null;
     let availableColumns: Set<string>;
     let introspectedColumns: string[];
@@ -388,7 +394,7 @@ export async function GET() {
         staticShortCircuitEnabled
       }));
     } finally {
-      console.info(`dashboard-overview-schema-resolve-wrapper-end: ${formatDurationMs(performance.now() - schemaResolveWrapperStart)}`);
+      endSchemaResolveWrapper();
     }
 
     console.info(
@@ -430,8 +436,7 @@ export async function GET() {
       return query;
     };
 
-    console.info("dashboard-overview-summary-query-start");
-    const summaryStart = performance.now();
+    const endSummaryQuery = createPerfStepLogger("dashboard-overview-summary-query");
     let total = 0;
     let pending = 0;
     let precheckPending = 0;
@@ -444,9 +449,11 @@ export async function GET() {
         const canUseSummaryRpc = table === DASHBOARD_CANONICAL_TABLE && hasUserIdColumn;
         if (canUseSummaryRpc) {
           console.info("dashboard-overview-summary-rpc-attempted");
+          const endSummaryRpc = createPerfStepLogger("dashboard-overview-summary-rpc");
           const { data: summaryRows, error: summaryRpcError } = await supabase.rpc("dashboard_overview_summary", {
             p_user_id: user.id
           });
+          endSummaryRpc();
 
           if (!summaryRpcError) {
             const row = Array.isArray(summaryRows) ? summaryRows[0] : null;
@@ -463,6 +470,7 @@ export async function GET() {
         }
 
         if (!summaryResolvedByRpc) {
+          const endSummaryFallbackCountQueries = createPerfStepLogger("dashboard-overview-summary-count-queries");
           const [totalResult, pendingResult, precheckPendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
             buildCountQuery(),
             buildCountQuery().in("status", [...PENDING_STATUSES]),
@@ -471,6 +479,7 @@ export async function GET() {
             buildCountQuery().in("status", [...REJECTED_STATUSES]),
             buildCountQuery().in("status", [...COMPLETED_STATUSES])
           ]);
+          endSummaryFallbackCountQueries();
 
           const summaryError =
             totalResult.error ?? pendingResult.error ?? precheckPendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
@@ -488,7 +497,9 @@ export async function GET() {
         }
 
         if (summaryResolvedByRpc) {
+          const endPrecheckPendingCount = createPerfStepLogger("dashboard-overview-summary-precheck-count");
           const { count: precheckCount, error: precheckError } = await buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]);
+          endPrecheckPendingCount();
           if (precheckError) {
             return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${precheckError.message}` }, { status: 500 });
           }
@@ -496,18 +507,19 @@ export async function GET() {
         }
       } else {
         console.info("dashboard-overview-summary-status-column-missing: total-only");
+        const endTotalOnlyCount = createPerfStepLogger("dashboard-overview-summary-total-count");
         const { count: totalCount, error: totalError } = await buildCountQuery();
+        endTotalOnlyCount();
         if (totalError) {
           return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 });
         }
         total = totalCount ?? 0;
       }
     } finally {
-      console.info(`dashboard-overview-summary-query-end: ${formatDurationMs(performance.now() - summaryStart)}`);
+      endSummaryQuery();
     }
 
-    console.info("dashboard-overview-jobs-query-start");
-    const jobsStart = performance.now();
+    const endJobsQuery = createPerfStepLogger("dashboard-overview-jobs-query");
     let jobs: Record<string, unknown>[] = [];
     try {
       if (availableColumns.has("payload")) {
@@ -522,25 +534,28 @@ export async function GET() {
         jobsQuery = jobsQuery.eq("user_id", user.id);
       }
 
+      const endJobsSelect = createPerfStepLogger("dashboard-overview-jobs-select");
       const { data: jobsData, error: jobsError } = await jobsQuery;
+      endJobsSelect();
       if (jobsError) {
         return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsError.message}` }, { status: 500 });
       }
 
+      const endJobsTitleTransform = createPerfStepLogger("dashboard-overview-jobs-title-transform");
       jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[])
         .filter((job) => !isCompletedStatus(job.status))
         .map((job) => ({
           ...job,
           title: resolveTitleWithFallback(job)
         }));
+      endJobsTitleTransform();
     } finally {
-      console.info(`dashboard-overview-jobs-query-end: ${formatDurationMs(performance.now() - jobsStart)}`);
+      endJobsQuery();
     }
 
-    console.info("dashboard-overview-transform-start");
-    const transformStart = performance.now();
+    const endTransform = createPerfStepLogger("dashboard-overview-transform");
     try {
-      return NextResponse.json({
+      const responsePayload = {
         summary: {
           total,
           pending,
@@ -552,11 +567,16 @@ export async function GET() {
         jobs,
         hasUserIdColumn,
         currentUserId: user.id
-      });
+      };
+
+      const endResponseSerialization = createPerfStepLogger("dashboard-overview-response-serialization");
+      const response = NextResponse.json(responsePayload);
+      endResponseSerialization();
+      return response;
     } finally {
-      console.info(`dashboard-overview-transform-end: ${formatDurationMs(performance.now() - transformStart)}`);
+      endTransform();
     }
   } finally {
-    console.info(`dashboard-overview-route-end: ${formatDurationMs(performance.now() - routeStart)}`);
+    endRoute();
   }
 }
