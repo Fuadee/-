@@ -2,10 +2,12 @@ import DashboardJobList from "./DashboardJobList";
 import { fetchDashboardJobsOnServer, fetchDashboardSummaryOnServer } from "./data";
 
 export default async function DashboardJobsSection() {
+  const startedAt = performance.now();
+  console.info("[dashboard-rsc] jobs-section-render-start");
   try {
     const [jobsData, summaryData] = await Promise.all([
-      fetchDashboardJobsOnServer(),
-      fetchDashboardSummaryOnServer()
+      fetchDashboardJobsOnServer("jobs-section"),
+      fetchDashboardSummaryOnServer("jobs-section")
     ]);
 
     return (
@@ -24,6 +26,8 @@ export default async function DashboardJobsSection() {
         ไม่สามารถโหลดข้อมูลงานเอกสารได้: {errorMessage}
       </div>
     );
+  } finally {
+    console.info(`[dashboard-rsc] jobs-section-render-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
   }
 }
 

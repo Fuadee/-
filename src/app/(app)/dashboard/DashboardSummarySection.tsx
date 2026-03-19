@@ -10,17 +10,23 @@ function SummaryCard({ label, value, accent }: { label: string; value: number; a
 }
 
 export default async function DashboardSummarySection() {
-  const { summary } = await fetchDashboardSummaryOnServer();
+  const startedAt = performance.now();
+  console.info("[dashboard-rsc] summary-section-render-start");
+  try {
+    const { summary } = await fetchDashboardSummaryOnServer("summary-section");
 
-  return (
-    <div className="mb-6 grid gap-3 sm:grid-cols-5">
-      <SummaryCard label="ทั้งหมด" value={summary.activeCount} accent="text-violet-700" />
-      <SummaryCard label="รอตรวจเบื้องต้น" value={summary.precheckPendingCount} accent="text-amber-700" />
-      <SummaryCard label="รอตรวจ" value={summary.pendingReviewCount} accent="text-orange-700" />
-      <SummaryCard label="รอการแก้ไข" value={summary.needsFixCount} accent="text-rose-700" />
-      <SummaryCard label="เสร็จแล้ว" value={summary.completedCount} accent="text-sky-700" />
-    </div>
-  );
+    return (
+      <div className="mb-6 grid gap-3 sm:grid-cols-5">
+        <SummaryCard label="ทั้งหมด" value={summary.activeCount} accent="text-violet-700" />
+        <SummaryCard label="รอตรวจเบื้องต้น" value={summary.precheckPendingCount} accent="text-amber-700" />
+        <SummaryCard label="รอตรวจ" value={summary.pendingReviewCount} accent="text-orange-700" />
+        <SummaryCard label="รอการแก้ไข" value={summary.needsFixCount} accent="text-rose-700" />
+        <SummaryCard label="เสร็จแล้ว" value={summary.completedCount} accent="text-sky-700" />
+      </div>
+    );
+  } finally {
+    console.info(`[dashboard-rsc] summary-section-render-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+  }
 }
 
 export function DashboardSummarySectionFallback() {
