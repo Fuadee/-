@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { Suspense } from "react";
 
-import DashboardSummary from "./DashboardSummary";
+import DashboardJobsSection, { DashboardJobsSectionFallback } from "./DashboardJobsSection";
+import DashboardSummarySection, { DashboardSummarySectionFallback } from "./DashboardSummarySection";
 
 export default function DashboardPage() {
   return (
@@ -35,7 +37,13 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <DashboardSummary />
+        <Suspense fallback={<DashboardSummarySectionFallback />}>
+          <DashboardSummarySection />
+        </Suspense>
+
+        <Suspense fallback={<DashboardJobsSectionFallback />}>
+          <DashboardJobsSection />
+        </Suspense>
       </div>
     </section>
   );
