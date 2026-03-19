@@ -22,6 +22,24 @@ const DASHBOARD_FIELD_CANDIDATES = [
   "requester_name",
   "created_by"
 ] as const;
+const isDashboardPerfLogEnabled = process.env.NODE_ENV === "development";
+
+const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+const logDashboardPerf = (message: string): void => {
+  if (!isDashboardPerfLogEnabled) {
+    return;
+  }
+
+  console.info(message);
+};
+
+const createDashboardPerfTimer = (name: string): (() => void) => {
+  const startedAt = performance.now();
+  logDashboardPerf(`[dashboard-perf] ${name}-start`);
+  return () => {
+    logDashboardPerf(`[dashboard-perf] ${name}-end duration=${formatDurationMs(performance.now() - startedAt)}`);
+  };
+};
 
 const asUserId = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -84,18 +102,25 @@ const isCompletedStatus = (value: unknown): boolean => {
 };
 
 export async function GET() {
+  const endRoute = createDashboardPerfTimer("api-dashboard-jobs-route");
   const supabase = createSupabaseServer();
+  const endAuth = createDashboardPerfTimer("api-dashboard-jobs-auth");
   const {
     data: { user }
   } = await supabase.auth.getUser();
+  endAuth();
 
   if (!user) {
+    endRoute();
     return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
   }
 
+  const endResolveSchema = createDashboardPerfTimer("api-dashboard-jobs-schema-resolve");
   const { table, availableColumns } = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
+  endResolveSchema();
 
   if (!table) {
+    endRoute();
     return NextResponse.json({ message: "ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล" }, { status: 500 });
   }
 
@@ -104,6 +129,7 @@ export async function GET() {
   );
 
   if (!selectedColumns.includes("id")) {
+    endRoute();
     return NextResponse.json({ message: "ตารางงานเอกสารต้องมีคอลัมน์ id" }, { status: 500 });
   }
 
@@ -116,14 +142,22 @@ export async function GET() {
     query = query.eq("user_id", user.id);
   }
 
+  const endJobsQuery = createDashboardPerfTimer("api-dashboard-jobs-query");
   const { data, error } = await query;
+  endJobsQuery();
 
   if (error) {
+    endRoute();
     return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
   }
 
+  const endActiveFilter = createDashboardPerfTimer("api-dashboard-jobs-transform-filter-active");
   const activeJobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+  endActiveFilter();
+  const endCreatorMap = createDashboardPerfTimer("api-dashboard-jobs-transform-enrich-creator");
   const jobs = await enrichJobsWithCreatorName(supabase, activeJobs);
+  endCreatorMap();
+  endRoute();
 
   return NextResponse.json({
     jobs

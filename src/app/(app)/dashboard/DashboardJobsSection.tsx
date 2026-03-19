@@ -2,10 +2,22 @@ import DashboardJobList from "./DashboardJobList";
 import { fetchDashboardJobsOnServer } from "./data";
 
 export default async function DashboardJobsSection() {
+  const shouldLogPerf = process.env.NODE_ENV === "development";
   const startedAt = performance.now();
-  console.info("[dashboard-rsc] jobs-section-render-start");
+  if (shouldLogPerf) {
+    console.info("[dashboard-perf] jobs-section-render-start");
+  }
   try {
+    const jobsFetchStartedAt = performance.now();
+    if (shouldLogPerf) {
+      console.info("[dashboard-perf] jobs-section-fetch-start");
+    }
     const jobsData = await fetchDashboardJobsOnServer("jobs-section");
+    if (shouldLogPerf) {
+      console.info(
+        `[dashboard-perf] jobs-section-fetch-end duration=${(performance.now() - jobsFetchStartedAt).toFixed(3)}ms jobs=${jobsData.jobs.length}`
+      );
+    }
 
     return (
       <DashboardJobList
@@ -25,7 +37,9 @@ export default async function DashboardJobsSection() {
       </div>
     );
   } finally {
-    console.info(`[dashboard-rsc] jobs-section-render-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+    if (shouldLogPerf) {
+      console.info(`[dashboard-perf] jobs-section-render-end duration=${(performance.now() - startedAt).toFixed(3)}ms`);
+    }
   }
 }
 
