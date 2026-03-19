@@ -67,6 +67,38 @@ const formatDate = (value: unknown) => {
   }).format(date);
 };
 
+const getCreatorName = (job: JobRecord): string => {
+  const directName = asTrimmedString(job.created_by_name);
+  if (directName) {
+    return directName;
+  }
+
+  const assigneeName = asTrimmedString(job.assignee_name);
+  if (assigneeName) {
+    return assigneeName;
+  }
+
+  return "ไม่ระบุผู้สร้าง";
+};
+
+const getDepartmentName = (job: JobRecord): string => {
+  const department = asTrimmedString(job.department);
+  return department || "ไม่ระบุแผนก";
+};
+
+const formatJobCode = (jobId: unknown): string => {
+  const id = asTrimmedString(jobId);
+  if (!id) {
+    return "JOB-00000";
+  }
+
+  if (/^\d+$/.test(id)) {
+    return `JOB-${id.padStart(5, "0").slice(-5)}`;
+  }
+
+  return `JOB-${id.slice(-5)}`;
+};
+
 const normalizeStatus = (value: unknown): EffectiveStatus => {
   if (typeof value !== "string") {
     return "pending_approval";
@@ -625,8 +657,15 @@ export default function DashboardJobList({
                   <span className="pointer-events-none absolute hidden h-10 w-1 -translate-x-5 rounded-r-full bg-violet-300 opacity-0 transition group-hover:opacity-100 sm:block" />
                   <div className="sm:col-span-5">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">ชื่องาน</p>
-                    <p className="font-semibold text-slate-900">{getJobTitle(job)}</p>
-                    <p className="text-xs text-slate-500">Job #{id.slice(0, 8)}</p>
+                    <div className="flex flex-col space-y-0.5">
+                      <p className="text-sm font-semibold text-gray-900">{getJobTitle(job)}</p>
+                      <p className="text-xs text-gray-500">
+                        {getCreatorName(job)} • {getDepartmentName(job)}
+                      </p>
+                      <p className="text-xs text-gray-400" title={`เลขที่งาน: ${formatJobCode(id)}`}>
+                        {formatJobCode(id)}
+                      </p>
+                    </div>
                   </div>
                   <div className="sm:col-span-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-slate-400 sm:hidden">สร้างเมื่อ</p>

@@ -24,12 +24,74 @@ export type DashboardJobsResponse = {
 };
 
 const DASHBOARD_SUMMARY_FIELD_CANDIDATES = ["id", "created_at", "status", "user_id"] as const;
-const DASHBOARD_JOBS_FIELD_CANDIDATES = ["id", "title", "case_title", "name", "created_at", "status", "tax_id", "payload", "user_id"] as const;
+const DASHBOARD_JOBS_FIELD_CANDIDATES = [
+  "id",
+  "title",
+  "case_title",
+  "name",
+  "department",
+  "created_at",
+  "status",
+  "tax_id",
+  "payload",
+  "user_id"
+] as const;
 const DASHBOARD_FETCH_MODE = "direct-data-access";
 const DASHBOARD_SUMMARY_REVALIDATE_SECONDS = 10;
 const DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT = 10;
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+const asUserId = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const enrichJobsWithCreatorName = async (
+  supabase: ReturnType<typeof createSupabaseServer>,
+  jobs: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> => {
+  const userIds = [...new Set(jobs.map((job) => asUserId(job.user_id)).filter((value): value is string => Boolean(value)))];
+
+  if (userIds.length === 0) {
+    return jobs;
+  }
+
+  const { data: usersData, error: usersError } = await supabase.from("users").select("id,name").in("id", userIds);
+  if (usersError || !Array.isArray(usersData)) {
+    return jobs;
+  }
+
+  const nameById = new Map(
+    usersData
+      .map((rowValue) => {
+        const row = rowValue as Record<string, unknown>;
+        const nameValue = row.name;
+        return {
+          id: asUserId(row.id),
+          name: typeof nameValue === "string" ? nameValue.trim() : ""
+        };
+      })
+      .filter((row): row is { id: string; name: string } => Boolean(row.id) && Boolean(row.name))
+      .map((row) => [row.id, row.name])
+  );
+
+  return jobs.map((job) => {
+    const userId = asUserId(job.user_id);
+    if (!userId || !nameById.has(userId)) {
+      return job;
+    }
+
+    return {
+      ...job,
+      created_by_name: nameById.get(userId)
+    };
+  });
+};
+
 const isCompletedStatus = (value: unknown): boolean => {
   if (typeof value !== "string") {
     return false;
@@ -157,7 +219,8 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
     throw new Error(`ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}`);
   }
 
-  const jobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+  const rawJobs = ((data ?? []) as unknown as Record<string, unknown>[]).filter((job) => !isCompletedStatus(job.status));
+  const jobs = await enrichJobsWithCreatorName(supabase, rawJobs);
 
   return {
     jobs: jobs.slice(0, DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT) as JobRecord[],
