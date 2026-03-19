@@ -132,6 +132,8 @@ type StaticColumnsCache = {
 };
 
 let staticColumnsCache: StaticColumnsCache | null = null;
+type StaticProbeCache = { expiresAt: number; canUse: boolean; reason: string };
+let staticProbeCache: StaticProbeCache | null = null;
 
 const getMissingColumns = (availableColumns: Set<string>, requiredColumns: readonly string[]): string[] =>
   requiredColumns.filter((column) => !availableColumns.has(column));
@@ -140,6 +142,9 @@ const toSortedColumnList = (columns: Set<string>): string[] => [...columns].sort
 
 const hasFreshStaticColumnsCache = (entry: StaticColumnsCache | null): entry is StaticColumnsCache =>
   Boolean(entry && entry.expiresAt > Date.now());
+const hasFreshStaticProbeCache = (
+  entry: typeof staticProbeCache
+): entry is StaticProbeCache => Boolean(entry && entry.expiresAt > Date.now());
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
 const createPerfStepLogger = (name: string): (() => void) => {
@@ -269,8 +274,20 @@ const resolveDashboardSchema = async (
     const predeclaredColumns = new Set(DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS);
     if (options.staticShortCircuitEnabled) {
       const staticProbeStart = performance.now();
-      const staticProbeResult = await canUsePredeclaredStaticColumns(supabase, predeclaredColumns);
-      console.info(`dashboard-overview-schema-static-probe-end: ${formatDurationMs(performance.now() - staticProbeStart)}`);
+      const probeCacheHit = hasFreshStaticProbeCache(staticProbeCache);
+      const staticProbeResult = probeCacheHit
+        ? { canUse: staticProbeCache!.canUse, reason: staticProbeCache!.reason }
+        : await canUsePredeclaredStaticColumns(supabase, predeclaredColumns);
+      if (!probeCacheHit) {
+        staticProbeCache = {
+          expiresAt: Date.now() + DASHBOARD_STATIC_COLUMNS_CACHE_TTL_MS,
+          canUse: staticProbeResult.canUse,
+          reason: staticProbeResult.reason
+        };
+      }
+      console.info(
+        `dashboard-overview-schema-static-probe-end: ${formatDurationMs(performance.now() - staticProbeStart)} (source=${probeCacheHit ? "cache" : "probe"})`
+      );
 
       if (staticProbeResult.canUse) {
         const missingMinimumColumns = getMissingColumns(predeclaredColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
@@ -436,135 +453,155 @@ export async function GET() {
       return query;
     };
 
-    const endSummaryQuery = createPerfStepLogger("dashboard-overview-summary-query");
-    let total = 0;
-    let pending = 0;
-    let precheckPending = 0;
-    let approved = 0;
-    let rejected = 0;
-    let completed = 0;
-    let summaryResolvedByRpc = false;
-    try {
-      if (hasStatusColumn) {
-        const canUseSummaryRpc = table === DASHBOARD_CANONICAL_TABLE && hasUserIdColumn;
-        if (canUseSummaryRpc) {
-          console.info("dashboard-overview-summary-rpc-attempted");
-          const endSummaryRpc = createPerfStepLogger("dashboard-overview-summary-rpc");
-          const { data: summaryRows, error: summaryRpcError } = await supabase.rpc("dashboard_overview_summary", {
-            p_user_id: user.id
-          });
-          endSummaryRpc();
+    const summaryPromise = (async (): Promise<
+      | { ok: true; summary: { total: number; pending: number; precheckPending: number; approved: number; rejected: number; completed: number } }
+      | { ok: false; response: NextResponse }
+    > => {
+      const endSummaryQuery = createPerfStepLogger("dashboard-overview-summary-query");
+      try {
+        let total = 0;
+        let pending = 0;
+        let precheckPending = 0;
+        let approved = 0;
+        let rejected = 0;
+        let completed = 0;
+        let summaryResolvedByRpc = false;
+        if (hasStatusColumn) {
+          const canUseSummaryRpc = table === DASHBOARD_CANONICAL_TABLE && hasUserIdColumn;
+          if (canUseSummaryRpc) {
+            console.info("dashboard-overview-summary-rpc-attempted");
+            const endSummaryRpc = createPerfStepLogger("dashboard-overview-summary-rpc");
+            const { data: summaryRows, error: summaryRpcError } = await supabase.rpc("dashboard_overview_summary", {
+              p_user_id: user.id
+            });
+            endSummaryRpc();
 
-          if (!summaryRpcError) {
-            const row = Array.isArray(summaryRows) ? summaryRows[0] : null;
-            total = Number(row?.total ?? 0);
-            pending = Number(row?.pending ?? 0);
-            approved = Number(row?.approved ?? 0);
-            rejected = Number(row?.rejected ?? 0);
-            completed = Number(row?.completed ?? 0);
-            summaryResolvedByRpc = true;
-            console.info("dashboard-overview-summary-rpc-used");
-          } else {
-            console.info(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
-          }
-        }
-
-        if (!summaryResolvedByRpc) {
-          const endSummaryFallbackCountQueries = createPerfStepLogger("dashboard-overview-summary-count-queries");
-          const [totalResult, pendingResult, precheckPendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
-            buildCountQuery(),
-            buildCountQuery().in("status", [...PENDING_STATUSES]),
-            buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]),
-            buildCountQuery().in("status", [...APPROVED_STATUSES]),
-            buildCountQuery().in("status", [...REJECTED_STATUSES]),
-            buildCountQuery().in("status", [...COMPLETED_STATUSES])
-          ]);
-          endSummaryFallbackCountQueries();
-
-          const summaryError =
-            totalResult.error ?? pendingResult.error ?? precheckPendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
-          if (summaryError) {
-            return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 });
+            if (!summaryRpcError) {
+              const row = Array.isArray(summaryRows) ? summaryRows[0] : null;
+              total = Number(row?.total ?? 0);
+              pending = Number(row?.pending ?? 0);
+              approved = Number(row?.approved ?? 0);
+              rejected = Number(row?.rejected ?? 0);
+              completed = Number(row?.completed ?? 0);
+              summaryResolvedByRpc = true;
+              console.info("dashboard-overview-summary-rpc-used");
+            } else {
+              console.info(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
+            }
           }
 
-          total = totalResult.count ?? 0;
-          pending = pendingResult.count ?? 0;
-          precheckPending = precheckPendingResult.count ?? 0;
-          approved = approvedResult.count ?? 0;
-          rejected = rejectedResult.count ?? 0;
-          completed = completedResult.count ?? 0;
-          console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
+          if (!summaryResolvedByRpc) {
+            const endSummaryFallbackCountQueries = createPerfStepLogger("dashboard-overview-summary-count-queries");
+            const [totalResult, pendingResult, precheckPendingResult, approvedResult, rejectedResult, completedResult] = await Promise.all([
+              buildCountQuery(),
+              buildCountQuery().in("status", [...PENDING_STATUSES]),
+              buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]),
+              buildCountQuery().in("status", [...APPROVED_STATUSES]),
+              buildCountQuery().in("status", [...REJECTED_STATUSES]),
+              buildCountQuery().in("status", [...COMPLETED_STATUSES])
+            ]);
+            endSummaryFallbackCountQueries();
+
+            const summaryError =
+              totalResult.error ?? pendingResult.error ?? precheckPendingResult.error ?? approvedResult.error ?? rejectedResult.error ?? completedResult.error;
+            if (summaryError) {
+              return { ok: false, response: NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${summaryError.message}` }, { status: 500 }) };
+            }
+
+            total = totalResult.count ?? 0;
+            pending = pendingResult.count ?? 0;
+            precheckPending = precheckPendingResult.count ?? 0;
+            approved = approvedResult.count ?? 0;
+            rejected = rejectedResult.count ?? 0;
+            completed = completedResult.count ?? 0;
+            console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
+          }
+
+          if (summaryResolvedByRpc) {
+            const endPrecheckPendingCount = createPerfStepLogger("dashboard-overview-summary-precheck-count");
+            const { count: precheckCount, error: precheckError } = await buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]);
+            endPrecheckPendingCount();
+            if (precheckError) {
+              return { ok: false, response: NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${precheckError.message}` }, { status: 500 }) };
+            }
+            precheckPending = precheckCount ?? 0;
+          }
+        } else {
+          console.info("dashboard-overview-summary-status-column-missing: total-only");
+          const endTotalOnlyCount = createPerfStepLogger("dashboard-overview-summary-total-count");
+          const { count: totalCount, error: totalError } = await buildCountQuery();
+          endTotalOnlyCount();
+          if (totalError) {
+            return { ok: false, response: NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 }) };
+          }
+          total = totalCount ?? 0;
         }
 
-        if (summaryResolvedByRpc) {
-          const endPrecheckPendingCount = createPerfStepLogger("dashboard-overview-summary-precheck-count");
-          const { count: precheckCount, error: precheckError } = await buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]);
-          endPrecheckPendingCount();
-          if (precheckError) {
-            return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${precheckError.message}` }, { status: 500 });
-          }
-          precheckPending = precheckCount ?? 0;
-        }
-      } else {
-        console.info("dashboard-overview-summary-status-column-missing: total-only");
-        const endTotalOnlyCount = createPerfStepLogger("dashboard-overview-summary-total-count");
-        const { count: totalCount, error: totalError } = await buildCountQuery();
-        endTotalOnlyCount();
-        if (totalError) {
-          return NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${totalError.message}` }, { status: 500 });
-        }
-        total = totalCount ?? 0;
+        return {
+          ok: true,
+          summary: { total, pending, precheckPending, approved, rejected, completed }
+        };
+      } finally {
+        endSummaryQuery();
       }
-    } finally {
-      endSummaryQuery();
+    })();
+
+    const jobsPromise = (async (): Promise<{ ok: true; jobs: Record<string, unknown>[] } | { ok: false; response: NextResponse }> => {
+      const endJobsQuery = createPerfStepLogger("dashboard-overview-jobs-query");
+      try {
+        if (availableColumns.has("payload")) {
+          console.info("dashboard-overview-jobs-payload-column-retained: title-fallback-required");
+        }
+        let jobsQuery = supabase.from(table).select(selectedColumns.join(","));
+
+        const orderByColumn = availableColumns.has("created_at") ? "created_at" : "id";
+        jobsQuery = jobsQuery.order(orderByColumn, { ascending: false }).limit(20);
+
+        if (hasUserIdColumn) {
+          jobsQuery = jobsQuery.eq("user_id", user.id);
+        }
+
+        const endJobsSelect = createPerfStepLogger("dashboard-overview-jobs-select");
+        const { data: jobsData, error: jobsError } = await jobsQuery;
+        endJobsSelect();
+        if (jobsError) {
+          return { ok: false, response: NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsError.message}` }, { status: 500 }) };
+        }
+
+        const endJobsTitleTransform = createPerfStepLogger("dashboard-overview-jobs-title-transform");
+        const jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[])
+          .filter((job) => !isCompletedStatus(job.status))
+          .map((job) => ({
+            ...job,
+            title: resolveTitleWithFallback(job)
+          }));
+        endJobsTitleTransform();
+        return { ok: true, jobs };
+      } finally {
+        endJobsQuery();
+      }
+    })();
+
+    const [summaryResult, jobsResult] = await Promise.all([summaryPromise, jobsPromise]);
+    if (!summaryResult.ok) {
+      return summaryResult.response;
     }
-
-    const endJobsQuery = createPerfStepLogger("dashboard-overview-jobs-query");
-    let jobs: Record<string, unknown>[] = [];
-    try {
-      if (availableColumns.has("payload")) {
-        console.info("dashboard-overview-jobs-payload-column-retained: title-fallback-required");
-      }
-      let jobsQuery = supabase.from(table).select(selectedColumns.join(","));
-
-      const orderByColumn = availableColumns.has("created_at") ? "created_at" : "id";
-      jobsQuery = jobsQuery.order(orderByColumn, { ascending: false }).limit(20);
-
-      if (hasUserIdColumn) {
-        jobsQuery = jobsQuery.eq("user_id", user.id);
-      }
-
-      const endJobsSelect = createPerfStepLogger("dashboard-overview-jobs-select");
-      const { data: jobsData, error: jobsError } = await jobsQuery;
-      endJobsSelect();
-      if (jobsError) {
-        return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsError.message}` }, { status: 500 });
-      }
-
-      const endJobsTitleTransform = createPerfStepLogger("dashboard-overview-jobs-title-transform");
-      jobs = ((jobsData ?? []) as unknown as Record<string, unknown>[])
-        .filter((job) => !isCompletedStatus(job.status))
-        .map((job) => ({
-          ...job,
-          title: resolveTitleWithFallback(job)
-        }));
-      endJobsTitleTransform();
-    } finally {
-      endJobsQuery();
+    if (!jobsResult.ok) {
+      return jobsResult.response;
     }
 
     const endTransform = createPerfStepLogger("dashboard-overview-transform");
     try {
       const responsePayload = {
         summary: {
-          total,
-          pending,
-          precheckPending,
-          approved,
-          rejected,
-          completed
+          total: summaryResult.summary.total,
+          pending: summaryResult.summary.pending,
+          precheckPending: summaryResult.summary.precheckPending,
+          approved: summaryResult.summary.approved,
+          rejected: summaryResult.summary.rejected,
+          completed: summaryResult.summary.completed
         },
-        jobs,
+        jobs: jobsResult.jobs,
         hasUserIdColumn,
         currentUserId: user.id
       };
