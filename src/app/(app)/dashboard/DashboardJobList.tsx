@@ -1,23 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
-import StatusActionDialog, { type EffectiveStatus } from "./StatusActionDialog";
+import { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
   jobs: JobRecord[];
-  initialCounts: {
-    activeCount: number;
-    pendingReviewCount: number;
-    precheckPendingCount: number;
-    needsFixCount: number;
-    completedCount: number;
-  };
-  isInitialJobsLoading: boolean;
   hasUserIdColumn: boolean;
   currentUserId: string | null;
+  initialCompletedCount: number;
 };
 
 type DashboardJobItem = JobRecord & {
@@ -167,6 +161,8 @@ const getStatusLabel = (status: EffectiveStatus): string =>
     completed: "ดำเนินการแล้วเสร็จ"
   })[status];
 
+const StatusActionDialog = dynamic(() => import("./StatusActionDialog"));
+
 const statusClassName: Record<EffectiveStatus, string> = {
   precheck_pending: "border-yellow-200 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 focus-visible:ring-yellow-300",
   document_pending: "border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 focus-visible:ring-indigo-300",
@@ -177,26 +173,6 @@ const statusClassName: Record<EffectiveStatus, string> = {
   completed: "border-sky-100 bg-sky-50 text-sky-700 hover:bg-sky-100 focus-visible:ring-sky-300"
 };
 
-type KpiCardProps = {
-  label: string;
-  value: number;
-  accent: string;
-  icon: ReactNode;
-};
-
-function KpiCard({ label, value, accent, icon }: KpiCardProps) {
-  return (
-    <div className="group rounded-2xl border border-[color:var(--border)] bg-white p-4 shadow-[var(--soft-shadow)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(124,58,237,0.15)]">
-      <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full ${accent} text-white shadow-sm`}>{icon}</div>
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="text-3xl font-semibold tracking-tight text-slate-900">{value}</p>
-      <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-        <div className={`h-full rounded-full ${accent} opacity-60`} style={{ width: value > 0 ? "68%" : "18%" }} />
-      </div>
-    </div>
-  );
-}
-
 const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
   ...job,
   id: String(job.id ?? ""),
@@ -204,10 +180,15 @@ const toDashboardItem = (job: JobRecord): DashboardJobItem => ({
   isRemoving: false
 });
 
-export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoading, hasUserIdColumn, currentUserId }: DashboardJobListProps) {
+export default function DashboardJobList({
+  jobs,
+  hasUserIdColumn,
+  currentUserId,
+  initialCompletedCount
+}: DashboardJobListProps) {
   const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
-  const [completedCount, setCompletedCount] = useState(initialCounts.completedCount);
+  const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
@@ -241,17 +222,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
     const base = completedItemsCache ?? [];
     return base.filter((item) => isCompletedStatus(item) && !item.isRemoving);
   }, [completedItemsCache]);
-
-  const totalCount = isInitialJobsLoading ? initialCounts.activeCount : activeItems.length;
-  const precheckPendingCount = isInitialJobsLoading
-    ? initialCounts.precheckPendingCount
-    : precheckItems.length;
-  const pendingReviewCount = isInitialJobsLoading
-    ? initialCounts.pendingReviewCount
-    : mainFlowItems.filter((item) => normalizeStatus(item.status) === "pending_review").length;
-  const needsFixCount = isInitialJobsLoading
-    ? initialCounts.needsFixCount
-    : mainFlowItems.filter((item) => normalizeStatus(item.status) === "needs_fix").length;
 
   const fetchCompletedItems = async () => {
     if (completedItemsCache || isCompletedLoading) {
@@ -494,7 +464,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
     }, 800);
   };
 
-  const hasAnyItems = activeItems.length > 0 || completedCount > 0 || isCompletedLoading || isInitialJobsLoading;
+  const hasAnyItems = activeItems.length > 0 || completedCount > 0 || isCompletedLoading;
 
   if (!hasAnyItems) {
     return (
@@ -527,59 +497,6 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
 
   return (
     <>
-      <div className="mb-6 grid gap-3 sm:grid-cols-5">
-        <KpiCard
-          label="ทั้งหมด"
-          value={totalCount}
-          accent="bg-gradient-to-br from-violet-500 to-purple-500"
-          icon={
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <circle cx="12" cy="12" r="8" />
-            </svg>
-          }
-        />
-        <KpiCard
-          label="รอตรวจเบื้องต้น"
-          value={precheckPendingCount}
-          accent="bg-gradient-to-br from-yellow-400 to-amber-400"
-          icon={
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14h-2v-2h2zm0-4h-2V7h2z" />
-            </svg>
-          }
-        />
-        <KpiCard
-          label="รอตรวจ"
-          value={pendingReviewCount}
-          accent="bg-gradient-to-br from-amber-400 to-orange-400"
-          icon={
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M12 3 2 21h20L12 3zm0 6a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0v-4a1 1 0 0 1 1-1zm0 10a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z" />
-            </svg>
-          }
-        />
-        <KpiCard
-          label="รอการแก้ไข"
-          value={needsFixCount}
-          accent="bg-gradient-to-br from-rose-500 to-fuchsia-500"
-          icon={
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.54 13.46a1 1 0 0 1-1.42 1.42L12 14.76l-2.12 2.12a1 1 0 0 1-1.42-1.42L10.58 13 8.46 10.88a1 1 0 1 1 1.42-1.42L12 11.58l2.12-2.12a1 1 0 0 1 1.42 1.42L13.42 13z" />
-            </svg>
-          }
-        />
-        <KpiCard
-          label="เสร็จแล้ว"
-          value={completedCount}
-          accent="bg-gradient-to-br from-sky-500 to-blue-500"
-          icon={
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-              <path d="M9.5 16.2 5.8 12.5l1.4-1.4 2.3 2.3 7.3-7.3 1.4 1.4z" />
-            </svg>
-          }
-        />
-      </div>
-
       <div className="mb-4 inline-flex rounded-full border border-slate-200 bg-slate-100/60 p-1 transition duration-200">
         <button
           type="button"
@@ -648,7 +565,7 @@ export default function DashboardJobList({ jobs, initialCounts, isInitialJobsLoa
           <p className="col-span-2 text-right">การทำงาน</p>
         </div>
 
-        {((isCompletedLoading && currentTab === "completed") || (isInitialJobsLoading && currentTab === "active")) ? (
+        {isCompletedLoading && currentTab === "completed" ? (
           <div className="divide-y divide-slate-100">
             {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="grid animate-pulse gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
