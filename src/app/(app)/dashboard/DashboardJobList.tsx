@@ -12,6 +12,7 @@ type DashboardJobListProps = {
   hasUserIdColumn: boolean;
   currentUserId: string | null;
   initialCompletedCount: number;
+  hasMoreInitialJobs: boolean;
 };
 
 type DashboardJobItem = JobRecord & {
@@ -184,9 +185,12 @@ export default function DashboardJobList({
   jobs,
   hasUserIdColumn,
   currentUserId,
-  initialCompletedCount
+  initialCompletedCount,
+  hasMoreInitialJobs
 }: DashboardJobListProps) {
   const [items, setItems] = useState<DashboardJobItem[]>(jobs.map(toDashboardItem));
+  const [hasMoreActiveItems, setHasMoreActiveItems] = useState(hasMoreInitialJobs);
+  const [isLoadingMoreActive, setIsLoadingMoreActive] = useState(false);
   const [completedItemsCache, setCompletedItemsCache] = useState<DashboardJobItem[] | null>(null);
   const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
@@ -207,7 +211,8 @@ export default function DashboardJobList({
 
   useEffect(() => {
     setItems(jobs.map(toDashboardItem));
-  }, [jobs]);
+    setHasMoreActiveItems(hasMoreInitialJobs);
+  }, [hasMoreInitialJobs, jobs]);
 
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const precheckItems = useMemo(
@@ -260,6 +265,33 @@ export default function DashboardJobList({
 
     if (nextTab === "completed") {
       void fetchCompletedItems();
+    }
+  };
+
+  const handleLoadMoreActive = async () => {
+    if (isLoadingMoreActive || !hasMoreActiveItems) {
+      return;
+    }
+
+    setIsLoadingMoreActive(true);
+    try {
+      const response = await fetch("/api/dashboard/jobs", {
+        method: "GET",
+        cache: "no-store"
+      });
+
+      const payload = (await response.json()) as { jobs?: JobRecord[]; message?: string };
+      if (!response.ok || !Array.isArray(payload.jobs)) {
+        throw new Error(payload.message ?? "โหลดรายการงานเพิ่มเติมไม่สำเร็จ");
+      }
+
+      const nextItems = payload.jobs.map(toDashboardItem);
+      setItems(nextItems);
+      setHasMoreActiveItems(false);
+    } catch (error) {
+      setCompletedError(error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
+    } finally {
+      setIsLoadingMoreActive(false);
     }
   };
 
@@ -568,11 +600,11 @@ export default function DashboardJobList({
         {isCompletedLoading && currentTab === "completed" ? (
           <div className="divide-y divide-slate-100">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="grid animate-pulse gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
-                <div className="h-4 rounded bg-slate-100 sm:col-span-5" />
-                <div className="h-4 rounded bg-slate-100 sm:col-span-3" />
-                <div className="h-4 rounded bg-slate-100 sm:col-span-2" />
-                <div className="h-4 rounded bg-slate-100 sm:col-span-2" />
+              <div key={index} className="grid gap-4 px-5 py-4 sm:grid-cols-12 sm:items-center sm:px-6">
+                <div className="skeleton-shimmer h-4 rounded sm:col-span-5" />
+                <div className="skeleton-shimmer h-4 rounded sm:col-span-3" />
+                <div className="skeleton-shimmer h-4 rounded sm:col-span-2" />
+                <div className="skeleton-shimmer h-4 rounded sm:col-span-2" />
               </div>
             ))}
           </div>
@@ -671,6 +703,19 @@ export default function DashboardJobList({
           </div>
         )}
       </div>
+
+      {currentTab === "active" && hasMoreActiveItems ? (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={() => void handleLoadMoreActive()}
+            disabled={isLoadingMoreActive}
+            className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoadingMoreActive ? "กำลังโหลด..." : "โหลดรายการเพิ่มเติม"}
+          </button>
+        </div>
+      ) : null}
 
       {completedError ? <div className="mt-3 text-sm text-rose-600">{completedError}</div> : null}
 
