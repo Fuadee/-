@@ -480,11 +480,12 @@ export async function GET() {
               const row = Array.isArray(summaryRows) ? summaryRows[0] : null;
               total = Number(row?.total ?? 0);
               pending = Number(row?.pending ?? 0);
+              precheckPending = Number(row?.precheck_pending ?? 0);
               approved = Number(row?.approved ?? 0);
               rejected = Number(row?.rejected ?? 0);
               completed = Number(row?.completed ?? 0);
               summaryResolvedByRpc = true;
-              console.info("dashboard-overview-summary-rpc-used");
+              console.info("dashboard-overview-summary-rpc-used-with-precheck-pending");
             } else {
               console.info(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
             }
@@ -515,16 +516,6 @@ export async function GET() {
             rejected = rejectedResult.count ?? 0;
             completed = completedResult.count ?? 0;
             console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
-          }
-
-          if (summaryResolvedByRpc) {
-            const endPrecheckPendingCount = createPerfStepLogger("dashboard-overview-summary-precheck-count");
-            const { count: precheckCount, error: precheckError } = await buildCountQuery().in("status", [...PRECHECK_PENDING_STATUSES]);
-            endPrecheckPendingCount();
-            if (precheckError) {
-              return { ok: false, response: NextResponse.json({ message: `ไม่สามารถโหลด summary ของ dashboard ได้: ${precheckError.message}` }, { status: 500 }) };
-            }
-            precheckPending = precheckCount ?? 0;
           }
         } else {
           console.info("dashboard-overview-summary-status-column-missing: total-only");
