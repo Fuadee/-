@@ -388,19 +388,19 @@
 }
 
 .summaryBottomCard {
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .summaryBottomGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
-  gap: 24px;
+  gap: 28px;
   align-items: start;
 }
 
 .summaryBottom {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .summaryList {
@@ -459,8 +459,19 @@
 
 .summaryActions {
   display: grid;
-  gap: 12px;
+  gap: 14px;
   align-content: start;
+}
+
+.summaryActionChoiceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summaryActionChoice {
+  display: grid;
+  gap: 8px;
 }
 
 .workflowNotice {
@@ -542,7 +553,7 @@
 
 .primaryButton {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   padding: 12px 16px;
   color: #fff;
   background: linear-gradient(135deg, #f472b6 0%, #c084fc 48%, #fb923c 100%);
@@ -551,13 +562,13 @@
 
 .precheckButton {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   padding: 12px 16px;
   border-radius: 12px;
-  border: 1px solid #f2d4a6;
-  color: #78350f;
-  background: linear-gradient(135deg, #fff7db 0%, #ffedd8 54%, #ffe7de 100%);
-  box-shadow: 0 8px 18px rgba(217, 119, 6, 0.14);
+  border: 1px solid #d7e0ee;
+  color: #334155;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 8px 18px rgba(100, 116, 139, 0.12);
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
@@ -565,19 +576,19 @@
 
 .precheckButton:hover:not(:disabled) {
   transform: translateY(-1px);
-  background: linear-gradient(135deg, #ffefc4 0%, #ffe2c5 54%, #ffdcd2 100%);
-  border-color: #ebc48d;
-  box-shadow: 0 10px 20px rgba(217, 119, 6, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border-color: #c7d2e3;
+  box-shadow: 0 10px 20px rgba(100, 116, 139, 0.17);
 }
 
 .precheckButton:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 6px 14px rgba(217, 119, 6, 0.14);
+  box-shadow: 0 6px 14px rgba(100, 116, 139, 0.14);
 }
 
 .precheckButton:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(252, 211, 133, 0.55), 0 10px 20px rgba(217, 119, 6, 0.16);
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.38), 0 10px 20px rgba(100, 116, 139, 0.16);
 }
 
 .precheckButton:disabled {
@@ -593,6 +604,14 @@
 .primaryButton:disabled {
   opacity: 0.72;
   cursor: not-allowed;
+}
+
+.actionHelperText {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #64748b;
+  text-align: left;
 }
 
 .spinnerWrap {
@@ -663,6 +682,15 @@
 
   .sectionHead {
     flex-wrap: wrap;
+  }
+
+  .summaryActionChoiceGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .actionHelperText {
+    font-size: 0.76rem;
   }
 }
 

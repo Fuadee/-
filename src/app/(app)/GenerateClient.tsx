@@ -1681,25 +1681,31 @@ export default function GenerateClient() {
                     </p>
                   ) : null}
                   {submitUiConfig.showDefaultButtons ? (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.precheckButton}
-                        onClick={() => void handleSubmit("precheck")}
-                        disabled={loading || !vatMode}
-                      >
-                        {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
-                      </button>
-                      <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
-                        {loading ? (
-                          <span className={styles.spinnerWrap}>
-                            <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
-                          </span>
-                        ) : (
-                          "บันทึกและส่งอนุมัติ"
-                        )}
-                      </button>
-                    </>
+                    <div className={styles.summaryActionChoiceGrid}>
+                      <div className={styles.summaryActionChoice}>
+                        <button
+                          type="button"
+                          className={styles.precheckButton}
+                          onClick={() => void handleSubmit("precheck")}
+                          disabled={loading || !vatMode}
+                        >
+                          {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
+                        </button>
+                        <p className={styles.actionHelperText}>ให้ผู้ตรวจดูก่อน ยังไม่ส่งอนุมัติ</p>
+                      </div>
+                      <div className={styles.summaryActionChoice}>
+                        <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
+                          {loading ? (
+                            <span className={styles.spinnerWrap}>
+                              <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
+                            </span>
+                          ) : (
+                            "บันทึกและส่งอนุมัติ"
+                          )}
+                        </button>
+                        <p className={styles.actionHelperText}>บันทึกข้อมูลและสร้างเอกสารส่งอนุมัติทันที</p>
+                      </div>
+                    </div>
                   ) : null}
                   {submitUiConfig.showSingleButton ? (
                     <button
