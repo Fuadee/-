@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { cookies, headers } from "next/headers";
 
 import type { JobRecord } from "@/lib/jobs";
 import DashboardJobList from "./DashboardJobList";
@@ -19,100 +17,64 @@ type DashboardOverviewResponse = {
   currentUserId: string | null;
 };
 
-let overviewRequest: Promise<DashboardOverviewResponse> | null = null;
+const getBaseUrl = async () => {
+  const headerStore = await headers();
+  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
+  const protocol = headerStore.get("x-forwarded-proto") ?? "http";
 
-const fetchJson = async <T extends object>(url: string): Promise<T> => {
-  const response = await fetch(url, { method: "GET", cache: "no-store" });
-  const payload = (await response.json()) as T | { message?: string };
+  if (!host) {
+    return "http://localhost:3000";
+  }
+
+  return `${protocol}://${host}`;
+};
+
+const fetchOverviewOnServer = async (): Promise<DashboardOverviewResponse> => {
+  const [baseUrl, cookieStore] = await Promise.all([getBaseUrl(), cookies()]);
+  const response = await fetch(`${baseUrl}/api/dashboard/overview`, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      cookie: cookieStore.toString()
+    }
+  });
+
+  const payload = (await response.json()) as DashboardOverviewResponse | { message?: string };
 
   if (!response.ok) {
     const message = "message" in payload && payload.message ? payload.message : "โหลดข้อมูล dashboard ไม่สำเร็จ";
     throw new Error(message);
   }
 
-  return payload as T;
+  return payload as DashboardOverviewResponse;
 };
 
-const fetchOverviewDeduped = async () => {
-  if (!overviewRequest) {
-    overviewRequest = fetchJson<DashboardOverviewResponse>("/api/dashboard/overview").finally(() => {
-      overviewRequest = null;
-    });
-  }
+export default async function DashboardSummary() {
+  try {
+    const overviewData = await fetchOverviewOnServer();
 
-  return overviewRequest;
-};
+    return (
+      <DashboardJobList
+        jobs={overviewData.jobs}
+        initialCounts={{
+          activeCount: Math.max(overviewData.summary.total - overviewData.summary.completed, 0),
+          pendingReviewCount: overviewData.summary.pending,
+          precheckPendingCount: overviewData.summary.precheckPending ?? 0,
+          needsFixCount: overviewData.summary.rejected,
+          completedCount: overviewData.summary.completed
+        }}
+        isInitialJobsLoading={false}
+        hasUserIdColumn={overviewData.hasUserIdColumn}
+        currentUserId={overviewData.currentUserId}
+      />
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
 
-export default function DashboardSummary() {
-  const [overviewData, setOverviewData] = useState<DashboardOverviewResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadOverview() {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const payload = await fetchOverviewDeduped();
-
-        if (!isCancelled) {
-          setOverviewData(payload);
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadOverview();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, []);
-
-  if (error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50/95 p-6 text-red-700 shadow-sm backdrop-blur">
-        ไม่สามารถโหลดข้อมูลงานเอกสารได้: {error}
+        ไม่สามารถโหลดข้อมูลงานเอกสารได้: {errorMessage}
       </div>
     );
   }
-
-  if (!overviewData) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="h-28 rounded-2xl border border-slate-100 bg-slate-100/80" />
-          <div className="h-28 rounded-2xl border border-slate-100 bg-slate-100/80" />
-          <div className="h-28 rounded-2xl border border-slate-100 bg-slate-100/80" />
-        </div>
-        <div className="h-64 rounded-2xl border border-slate-100 bg-slate-100/80" />
-      </div>
-    );
-  }
-
-  return (
-    <DashboardJobList
-      jobs={overviewData.jobs}
-      initialCounts={{
-        activeCount: Math.max(overviewData.summary.total - overviewData.summary.completed, 0),
-        pendingReviewCount: overviewData.summary.pending,
-        precheckPendingCount: overviewData.summary.precheckPending ?? 0,
-        needsFixCount: overviewData.summary.rejected,
-        completedCount: overviewData.summary.completed
-      }}
-      isInitialJobsLoading={isLoading}
-      hasUserIdColumn={overviewData.hasUserIdColumn}
-      currentUserId={overviewData.currentUserId}
-    />
-  );
 }
