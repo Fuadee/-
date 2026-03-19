@@ -394,7 +394,7 @@
 .summaryBottomGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
-  gap: 28px;
+  gap: 34px;
   align-items: start;
 }
 
@@ -472,6 +472,7 @@
 .summaryActionChoice {
   display: grid;
   gap: 8px;
+  align-content: start;
 }
 
 .workflowNotice {
@@ -554,31 +555,48 @@
 .primaryButton {
   width: 100%;
   min-height: 52px;
-  padding: 12px 16px;
+  height: 52px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-weight: 700;
+  font-size: 0.95rem;
   color: #fff;
-  background: linear-gradient(135deg, #f472b6 0%, #c084fc 48%, #fb923c 100%);
-  box-shadow: 0 12px 26px rgba(232, 121, 249, 0.26);
+  background: linear-gradient(135deg, #fb7185 0%, #d8b4fe 52%, #fb923c 100%);
+  box-shadow: 0 10px 22px rgba(244, 114, 182, 0.21);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 
 .precheckButton {
   width: 100%;
   min-height: 52px;
-  padding: 12px 16px;
+  height: 52px;
+  padding: 0 16px;
   border-radius: 12px;
-  border: 1px solid #d7e0ee;
-  color: #334155;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: 0 8px 18px rgba(100, 116, 139, 0.12);
-  font-weight: 600;
+  border: 1px solid #f4c97a;
+  color: #7c3d08;
+  background: linear-gradient(180deg, #fffdf7 0%, #ffefcc 100%);
+  box-shadow: 0 10px 20px rgba(245, 158, 11, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-weight: 700;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .precheckButton:hover:not(:disabled) {
   transform: translateY(-1px);
-  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
-  border-color: #c7d2e3;
-  box-shadow: 0 10px 20px rgba(100, 116, 139, 0.17);
+  background: linear-gradient(180deg, #fffdf7 0%, #fee8b2 100%);
+  border-color: #eab55d;
+  box-shadow: 0 12px 24px rgba(245, 158, 11, 0.2);
 }
 
 .precheckButton:active:not(:disabled) {
@@ -588,21 +606,27 @@
 
 .precheckButton:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.38), 0 10px 20px rgba(100, 116, 139, 0.16);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.28), 0 12px 24px rgba(245, 158, 11, 0.18);
 }
 
 .precheckButton:disabled {
-  opacity: 0.72;
+  opacity: 0.66;
   cursor: not-allowed;
 }
 
 .primaryButton:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 16px 30px rgba(232, 121, 249, 0.32);
+  filter: saturate(0.95);
+  box-shadow: 0 14px 28px rgba(244, 114, 182, 0.28);
+}
+
+.primaryButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.26), 0 14px 28px rgba(244, 114, 182, 0.24);
 }
 
 .primaryButton:disabled {
-  opacity: 0.72;
+  opacity: 0.68;
   cursor: not-allowed;
 }
 
@@ -614,10 +638,29 @@
   text-align: left;
 }
 
+.precheckHelperText {
+  color: #9a580d;
+  font-weight: 600;
+}
+
+.submitActionHelperText {
+  color: #64748b;
+}
+
+.buttonContent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1;
+}
+
 .spinnerWrap {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  line-height: 1;
 }
 
 .spinner {

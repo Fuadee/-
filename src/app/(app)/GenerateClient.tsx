@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, Search } from "lucide-react";
 import {
   buildPaymentBudgetDocText,
   getOperatingCostCenter,
@@ -1689,9 +1689,18 @@ export default function GenerateClient() {
                           onClick={() => void handleSubmit("precheck")}
                           disabled={loading || !vatMode}
                         >
-                          {loading ? "กำลังบันทึก..." : "ตรวจสอบก่อนส่ง"}
+                          {loading ? (
+                            <span className={styles.buttonContent}>กำลังบันทึก...</span>
+                          ) : (
+                            <span className={styles.buttonContent}>
+                              <Search size={16} aria-hidden />
+                              ตรวจสอบก่อนส่ง
+                            </span>
+                          )}
                         </button>
-                        <p className={styles.actionHelperText}>ให้ผู้ตรวจดูก่อน ยังไม่ส่งอนุมัติ</p>
+                        <p className={`${styles.actionHelperText} ${styles.precheckHelperText}`}>
+                          แนะนำให้ส่งให้ผู้ตรวจก่อนส่งทุกครั้ง
+                        </p>
                       </div>
                       <div className={styles.summaryActionChoice}>
                         <button type="submit" className={styles.primaryButton} disabled={loading || !vatMode}>
@@ -1700,10 +1709,12 @@ export default function GenerateClient() {
                               <span className={styles.spinner} aria-hidden /> กำลังสร้างไฟล์...
                             </span>
                           ) : (
-                            "บันทึกและส่งอนุมัติ"
+                            <span className={styles.buttonContent}>บันทึกและส่งอนุมัติ</span>
                           )}
                         </button>
-                        <p className={styles.actionHelperText}>บันทึกข้อมูลและสร้างเอกสารส่งอนุมัติทันที</p>
+                        <p className={`${styles.actionHelperText} ${styles.submitActionHelperText}`}>
+                          บันทึกข้อมูลและสร้างเอกสารส่งอนุมัติทันที
+                        </p>
                       </div>
                     </div>
                   ) : null}
