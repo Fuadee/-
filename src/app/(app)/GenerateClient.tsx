@@ -219,6 +219,9 @@ export default function GenerateClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editingJobId = searchParams.get("job")?.trim() || "";
+  const formMode = searchParams.get("mode")?.trim() || "";
+  const cloneSourceJobId = searchParams.get("source")?.trim() || "";
+  const isCloneMode = formMode === "clone" && Boolean(editingJobId);
   const [department, setDepartment] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectDetail, setSubjectDetail] = useState("");
@@ -1019,11 +1022,17 @@ export default function GenerateClient() {
       <main className={styles.page}>
       <div className={styles.container}>
         <div className={styles.header}>
-          <h1>Generate DOCX</h1>
-          <p>กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ</p>
+          <h1>{isCloneMode ? "คัดลอกงานเดิมเพื่อสร้างงานใหม่" : "Generate DOCX"}</h1>
+          <p>
+            {isCloneMode
+              ? "สร้างงานใหม่จากต้นแบบเดิมแล้ว กรุณาตรวจสอบเลขใบเสร็จ / วันที่ / เอกสารแนบก่อนส่ง"
+              : "กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ"}
+          </p>
           {editingJobId ? (
             <div className={styles.editingBanner}>
-              <span className={styles.editingBadge}>Editing existing job</span>
+              <span className={styles.editingBadge}>
+                {isCloneMode ? `New job from template${cloneSourceJobId ? ` #${cloneSourceJobId}` : ""}` : "Editing existing job"}
+              </span>
               <Link href="/dashboard" className={styles.backLink}>
                 ← Back to Dashboard
               </Link>
@@ -1032,6 +1041,12 @@ export default function GenerateClient() {
         </div>
 
         {loadingJob ? <p className={styles.loadingText}>กำลังโหลดข้อมูลงานเดิม...</p> : null}
+          {isCloneMode ? (
+          <div className={styles.revisionNotice}>
+            <p className={styles.revisionNoticeTitle}>นี่คือ “งานใหม่” ที่คัดลอกจากงานเดิม</p>
+            <p className={styles.revisionNoticeMeta}>โปรดตรวจสอบเลขใบเสร็จ วันที่ และเอกสารแนบอีกครั้งก่อนบันทึก/ส่งอนุมัติ</p>
+          </div>
+        ) : null}
           {editingJobId && editingJobStatus === NEEDS_FIX_STATUS ? (
           <div className={styles.revisionNotice}>
             <p className={styles.revisionNoticeTitle}>{getRevisionOriginNotice(returnFromStatus)}</p>
