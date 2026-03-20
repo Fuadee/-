@@ -13,6 +13,7 @@ export type PaymentBudget = {
 
 export const OPERATING_ORG_OPTIONS = [
   { label: "กลุ่มบริหาร กฟจ.กระบี่", costCenter: "K3014101000" },
+  { label: "แผนกสนับสนุน", costCenter: "K304101070" }
   { label: "แผนกบริการและลูกค้าสัมพันธ์", costCenter: "K304101010" },
   { label: "แผนกมิเตอร์และหม้อแปลง", costCenter: "k3041010202" },
   { label: "แผนกปฏิบัติการและบำรุงรักษาระบบไฟฟ้า", costCenter: "k304101030" },
