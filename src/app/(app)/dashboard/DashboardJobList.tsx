@@ -3,6 +3,7 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
 import { type EffectiveStatus } from "./StatusActionDialog";
@@ -270,6 +271,7 @@ export default function DashboardJobList({
   initialCompletedCount,
   hasMoreInitialJobs
 }: DashboardJobListProps) {
+  const router = useRouter();
   const [items, setItems] = useState<DashboardJobItem[]>(() =>
     measureDashboardPerf("jobs-list-transform-initial-map", () => jobs.map(toDashboardItem))
   );
@@ -292,6 +294,7 @@ export default function DashboardJobList({
   const [revisionNote, setRevisionNote] = useState("");
   const [revisionError, setRevisionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cloningJobId, setCloningJobId] = useState<string | null>(null);
 
   useEffect(() => {
     setItems(measureDashboardPerf("jobs-list-transform-props-map", () => jobs.map(toDashboardItem)));
@@ -418,6 +421,35 @@ export default function DashboardJobList({
       setItems((prev) => prev.filter((item) => item.id !== jobId));
       setCompletedItemsCache((prev) => (prev ? prev.map((item) => (item.id === jobId ? { ...item, isRemoving: false } : item)) : prev));
     }, 250);
+  };
+
+  const handleCloneAsNewJob = async (jobId: string) => {
+    if (!jobId || cloningJobId) {
+      return;
+    }
+
+    setCompletedError(null);
+    setCloningJobId(jobId);
+
+    try {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/clone`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+      const payload = (await response.json().catch(() => null)) as { message?: string; jobId?: string } | null;
+
+      if (!response.ok || !payload?.jobId) {
+        throw new Error(payload?.message ?? "ไม่สามารถคัดลอกงานเป็นงานใหม่ได้");
+      }
+
+      router.push(`/?job=${encodeURIComponent(payload.jobId)}&sourceJob=${encodeURIComponent(jobId)}&mode=clone`);
+    } catch (error) {
+      setCompletedError(error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ");
+    } finally {
+      setCloningJobId(null);
+    }
   };
 
   const handleStatusClick = (job: DashboardJobItem, status: EffectiveStatus) => {
@@ -760,13 +792,16 @@ export default function DashboardJobList({
                         >
                           ดูรายละเอียด
                         </Link>
-                        <Link
-                          href={`/?job=${encodeURIComponent(id)}`}
-                          prefetch={false}
-                          className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleCloneAsNewJob(id);
+                          }}
+                          className="focus-ring rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={cloningJobId === id}
                         >
-                          แก้ไข (สร้างเวอร์ชันใหม่)
-                        </Link>
+                          {cloningJobId === id ? "กำลังคัดลอก..." : "คัดลอกเป็นงานใหม่"}
+                        </button>
                       </>
                     ) : (
                       <>

@@ -219,6 +219,8 @@ export default function GenerateClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editingJobId = searchParams.get("job")?.trim() || "";
+  const sourceJobId = searchParams.get("sourceJob")?.trim() || "";
+  const isCloneMode = searchParams.get("mode")?.trim() === "clone";
   const [department, setDepartment] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectDetail, setSubjectDetail] = useState("");
@@ -1019,11 +1021,17 @@ export default function GenerateClient() {
       <main className={styles.page}>
       <div className={styles.container}>
         <div className={styles.header}>
-          <h1>Generate DOCX</h1>
-          <p>กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ</p>
+          <h1>{isCloneMode ? "คัดลอกงานเดิมเพื่อสร้างงานใหม่" : "Generate DOCX"}</h1>
+          <p>
+            {isCloneMode
+              ? "สร้างงานใหม่จากงานเดิมแล้ว กรุณาตรวจสอบเลขใบเสร็จ / วันที่ / เอกสารแนบอีกครั้งก่อนบันทึก"
+              : "กรอกข้อมูลเอกสารให้ครบถ้วนเพื่อสร้างไฟล์ Word อัตโนมัติ"}
+          </p>
           {editingJobId ? (
             <div className={styles.editingBanner}>
-              <span className={styles.editingBadge}>Editing existing job</span>
+              <span className={styles.editingBadge}>
+                {isCloneMode ? `New job draft from ${sourceJobId || "completed job"}` : "Editing existing job"}
+              </span>
               <Link href="/dashboard" className={styles.backLink}>
                 ← Back to Dashboard
               </Link>
