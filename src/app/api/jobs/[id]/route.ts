@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { sendLineGroupNotification } from "@/lib/line";
+import { hasLineNotificationConfig, sendLineNotification } from "@/lib/line";
 import {
   buildPrecheckNeedsFixLineMessage,
   buildNeedsFixReturnedToPrecheckLineMessage,
@@ -366,7 +366,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     try {
-      await sendLineGroupNotification(buildPaymentDoneMessage(existingJob, user));
+      await sendLineNotification(buildPaymentDoneMessage(existingJob, user), {
+        eventType: "payment_done",
+        jobId: params.id,
+        statusTransition: {
+          from: asTrimmedString(existingJob.status),
+          to: PAYMENT_DONE_STATUS
+        },
+        failHard: true
+      });
     } catch (lineError) {
       console.error("Unable to send LINE payment completion notification:", lineError);
       return NextResponse.json({ message: "ส่ง LINE ไม่สำเร็จ กรุณาลองใหม่" }, { status: 502 });
@@ -470,9 +478,6 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const jobUrl = `${origin}/?job=${encodeURIComponent(String(job.id ?? params.id))}`;
     const revisionRequestedAt = new Date(nowIso);
     const requesterProfile = resolveRequesterProfile(user);
-    const hasLineChannelAccessToken = Boolean(asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN));
-    const hasLineGroupId = Boolean(asTrimmedString(process.env.LINE_GROUP_ID));
-    const hasLineConfig = hasLineChannelAccessToken && hasLineGroupId;
     const lineMessage =
       currentStatus === PRECHECK_PENDING_STATUS
         ? buildPrecheckNeedsFixLineMessage({
@@ -491,13 +496,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         previousStatus: currentStatus || null,
         nextStatus: NEEDS_FIX_STATUS,
         returnReason: revisionNote,
-        hasLineChannelAccessToken,
-        hasLineGroupId
+        hasLineConfig: hasLineNotificationConfig()
       });
-      if (!hasLineConfig) {
-        throw new Error("LINE notification is not configured: LINE_CHANNEL_ACCESS_TOKEN and LINE_GROUP_ID are required.");
-      }
-      await sendLineGroupNotification(lineMessage);
+      await sendLineNotification(lineMessage, {
+        eventType: currentStatus === PRECHECK_PENDING_STATUS ? "precheck_needs_fix" : "needs_fix",
+        jobId: params.id,
+        statusTransition: {
+          from: currentStatus,
+          to: NEEDS_FIX_STATUS
+        }
+      });
       console.info(`${PATCH_DEBUG_PREFIX} line notify success`, {
         jobId: params.id,
         previousStatus: currentStatus || null,
@@ -609,7 +617,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
   if (nextStatus === "paid") {
     try {
-      await sendLineGroupNotification(buildPaymentDoneMessage(existingJob, user));
+      await sendLineNotification(buildPaymentDoneMessage(existingJob, user), {
+        eventType: "paid",
+        jobId: params.id,
+        statusTransition: {
+          from: asTrimmedString(existingJob.status),
+          to: "paid"
+        }
+      });
     } catch (lineError) {
       console.error("Unable to send LINE paid notification:", lineError);
     }
@@ -635,7 +650,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     });
 
     try {
-      await sendLineGroupNotification(lineMessage);
+      await sendLineNotification(lineMessage, {
+        eventType: "precheck_approved",
+        jobId: params.id,
+        statusTransition: {
+          from: asTrimmedString(existingJob.status),
+          to: nextStatus
+        }
+      });
     } catch (lineError) {
       console.error("Unable to send LINE precheck-approved notification:", {
         error: lineError,
@@ -661,7 +683,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       });
 
       try {
-        await sendLineGroupNotification(lineMessage);
+        await sendLineNotification(lineMessage, {
+          eventType: "needs_fix_returned_to_precheck",
+          jobId: params.id,
+          statusTransition: {
+            from: asTrimmedString(existingJob.status),
+            to: nextStatus
+          }
+        });
       } catch (lineError) {
         console.error("Unable to send LINE needs-fix-returned-to-precheck notification:", {
           error: lineError,

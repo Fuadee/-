@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { buildDocxTemplateData, type GeneratePayload } from "@/lib/docxTemplateData";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
-import { sendLineGroupNotification } from "@/lib/line";
+import { hasLineNotificationConfig, sendLineNotification } from "@/lib/line";
 import { buildPrecheckPendingLineMessage, resolveRequesterProfile } from "@/lib/lineNotifications";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -356,13 +356,11 @@ export async function POST(request: NextRequest) {
       createdJobId: createdJobId ?? null
     });
 
-    const missingLineEnv =
-      !asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN) || !asTrimmedString(process.env.LINE_GROUP_ID);
+    const missingLineEnv = !hasLineNotificationConfig();
 
     if (missingLineEnv) {
       console.warn(`${PRECHECK_DEBUG_PREFIX} missing LINE env`, {
-        hasLineChannelAccessToken: Boolean(asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN)),
-        hasLineGroupId: Boolean(asTrimmedString(process.env.LINE_GROUP_ID))
+        hasLineConfig: false
       });
     }
 
@@ -409,10 +407,17 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        console.info(`${PRECHECK_DEBUG_PREFIX} sendLineGroupNotification called`, {
+        console.info(`${PRECHECK_DEBUG_PREFIX} sendLineNotification called`, {
           jobId: resolvedJobId
         });
-        await sendLineGroupNotification(lineMessage);
+        await sendLineNotification(lineMessage, {
+          eventType: "precheck_pending",
+          jobId: resolvedJobId,
+          statusTransition: {
+            from: previousStatus ?? undefined,
+            to: nextStatus ?? undefined
+          }
+        });
         console.info(`${PRECHECK_DEBUG_PREFIX} LINE success`, {
           jobId: resolvedJobId
         });
