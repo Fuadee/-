@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { sendLineGroupNotification } from "@/lib/line";
 import {
+  buildPrecheckNeedsFixLineMessage,
   buildNeedsFixReturnedToPrecheckLineMessage,
   buildPrecheckApprovedLineMessage,
   resolveRequesterProfile
@@ -108,6 +109,7 @@ const ALLOWED_STATUS_UPDATES = new Set([
   PAYMENT_DONE_STATUS
 ]);
 const NEEDS_FIX_ALLOWED_RETURN_STATUSES = new Set([PRECHECK_PENDING_STATUS, PENDING_REVIEW_STATUS]);
+const PATCH_DEBUG_PREFIX = "[jobs.patch]";
 
 const resolveRevisionPhaseFromStatus = (status: string): string => {
   if (status === PRECHECK_PENDING_STATUS) {
@@ -347,6 +349,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
   }
 
+  console.info(`${PATCH_DEBUG_PREFIX} incoming action/status`, {
+    jobId: params.id,
+    action: action || null,
+    incomingStatus: nextStatus || null,
+    previousStatus: asTrimmedString(existingJob.status) || null,
+    returnReason: revisionNote || null
+  });
+
   if (action === "mark_payment_done") {
     if (asTrimmedString(existingJob.status).toLowerCase() === NEEDS_FIX_STATUS) {
       return NextResponse.json(
@@ -427,7 +437,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       revision_count: nextRevisionCount
     };
 
-    console.info("[jobs.patch] transition to needs_fix", {
+    console.info(`${PATCH_DEBUG_PREFIX} transition to needs_fix`, {
       jobId: params.id,
       currentStatus,
       requestedNextStatus: NEEDS_FIX_STATUS,
@@ -459,16 +469,48 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const origin = getOriginFromRequest(request);
     const jobUrl = `${origin}/?job=${encodeURIComponent(String(job.id ?? params.id))}`;
     const revisionRequestedAt = new Date(nowIso);
-    const lineMessage = buildNeedsFixLineMessage(job, assigneeName, revisionNote, jobUrl, revisionRequestedAt);
+    const requesterProfile = resolveRequesterProfile(user);
+    const hasLineChannelAccessToken = Boolean(asTrimmedString(process.env.LINE_CHANNEL_ACCESS_TOKEN));
+    const hasLineGroupId = Boolean(asTrimmedString(process.env.LINE_GROUP_ID));
+    const hasLineConfig = hasLineChannelAccessToken && hasLineGroupId;
+    const lineMessage =
+      currentStatus === PRECHECK_PENDING_STATUS
+        ? buildPrecheckNeedsFixLineMessage({
+            jobId: asTrimmedString(job.id) || params.id,
+            payload: job.payload ?? existingJob.payload ?? {},
+            returnerName:
+              requesterProfile.requesterDisplayName || requesterProfile.requesterName || requesterProfile.requesterEmail || "",
+            reason: revisionNote,
+            returnedAt: revisionRequestedAt
+          })
+        : buildNeedsFixLineMessage(job, assigneeName, revisionNote, jobUrl, revisionRequestedAt);
 
     try {
+      console.info(`${PATCH_DEBUG_PREFIX} line notify start`, {
+        jobId: params.id,
+        previousStatus: currentStatus || null,
+        nextStatus: NEEDS_FIX_STATUS,
+        returnReason: revisionNote,
+        hasLineChannelAccessToken,
+        hasLineGroupId
+      });
+      if (!hasLineConfig) {
+        throw new Error("LINE notification is not configured: LINE_CHANNEL_ACCESS_TOKEN and LINE_GROUP_ID are required.");
+      }
       await sendLineGroupNotification(lineMessage);
+      console.info(`${PATCH_DEBUG_PREFIX} line notify success`, {
+        jobId: params.id,
+        previousStatus: currentStatus || null,
+        nextStatus: NEEDS_FIX_STATUS
+      });
     } catch (lineError) {
-      console.error("Unable to send LINE needs-fix notification:", {
+      console.error(`${PATCH_DEBUG_PREFIX} line notify fail`, {
         error: lineError,
         jobId: params.id,
+        previousStatus: currentStatus || null,
+        nextStatus: NEEDS_FIX_STATUS,
         assigneeName,
-        revisionNote
+        returnReason: revisionNote
       });
     }
 
