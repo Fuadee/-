@@ -127,26 +127,6 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   if (availableColumns.has("updated_at")) cloneInsert.updated_at = new Date().toISOString();
   if (availableColumns.has("user_id")) cloneInsert.user_id = user.id;
 
-  const fieldsToResetAsNull = [
-    "doc_url",
-    "file_url",
-    "storage_path",
-    "paid_at",
-    "finished_at",
-    "return_from_status",
-    "revision_phase",
-    "revision_count",
-    "revision_note",
-    "revision_requested_at",
-    "revision_requested_by"
-  ] as const;
-
-  for (const field of fieldsToResetAsNull) {
-    if (availableColumns.has(field)) {
-      cloneInsert[field] = null;
-    }
-  }
-
   const { data: insertedRows, error: insertError } = await supabase.from(table).insert(cloneInsert).select("id,status").limit(1);
   if (insertError) {
     return NextResponse.json({ message: `ไม่สามารถคัดลอกงานเป็นงานใหม่ได้: ${insertError.message}` }, { status: 500 });
