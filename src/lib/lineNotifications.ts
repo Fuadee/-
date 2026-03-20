@@ -256,3 +256,40 @@ export const buildNeedsFixReturnedToPrecheckLineMessage = (input: {
     `ลิงก์ตรวจงาน: ${input.jobUrl}`
   ].join("\n");
 };
+
+export const buildPrecheckNeedsFixLineMessage = (input: {
+  jobId?: string;
+  payload: unknown;
+  returnerName?: string;
+  reason: string;
+  returnedAt: Date;
+}): string => {
+  const payload = parsePayload(input.payload);
+  const jobNumber =
+    asTrimmedString(payload.job_no) ||
+    asTrimmedString(payload.job_number) ||
+    asTrimmedString(payload.loan_doc_no) ||
+    asTrimmedString(payload.document_no) ||
+    asTrimmedString(input.jobId) ||
+    "-";
+  const topic = resolveJobTitle(payload);
+  const returnedAtThailand = new Intl.DateTimeFormat("th-TH", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(input.returnedAt);
+
+  return [
+    "🚨 งานตรวจสอบเบื้องต้นส่งกลับแก้ไข",
+    `เลขที่งาน: ${jobNumber}`,
+    `เรื่อง: ${topic}`,
+    `ผู้ส่งกลับ: ${asTrimmedString(input.returnerName) || "(ไม่ระบุชื่อ)"}`,
+    `เหตุผล: ${asTrimmedString(input.reason) || "-"}`,
+    `เวลา: ${returnedAtThailand} (Asia/Bangkok)`
+  ].join("\n");
+};
