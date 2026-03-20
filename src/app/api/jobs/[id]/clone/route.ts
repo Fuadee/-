@@ -115,7 +115,10 @@ const buildCloneWriteData = ({
   assignIfSupported("revision_requested_by", null);
   assignIfSupported("return_from_status", null);
   assignIfSupported("revision_phase", null);
-  assignIfSupported("revision_count", null);
+  assignIfSupported(
+    "revision_count",
+    typeof source.revision_count === "number" && Number.isFinite(source.revision_count) ? source.revision_count : 0
+  );
   assignIfSupported("updated_at", new Date().toISOString());
   assignIfSupported("payload", clonedPayload);
 
