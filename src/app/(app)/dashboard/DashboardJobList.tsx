@@ -131,6 +131,14 @@ const formatJobCode = (jobId: unknown): string => {
   return `JOB-${id.slice(-5)}`;
 };
 
+const normalizeSearchableText = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().toLocaleLowerCase();
+};
+
 const normalizeStatus = (value: unknown): EffectiveStatus => {
   if (typeof value !== "string") {
     return "pending_approval";
@@ -281,6 +289,8 @@ export default function DashboardJobList({
   const [completedCount, setCompletedCount] = useState(initialCompletedCount);
   const [currentTab, setCurrentTab] = useState<DashboardTab>("active");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
   const [isCompletedLoading, setIsCompletedLoading] = useState(false);
   const [completedError, setCompletedError] = useState<string | null>(null);
 
@@ -358,6 +368,15 @@ export default function DashboardJobList({
     if (nextTab === "completed") {
       void fetchCompletedItems();
     }
+  };
+
+  const handleSearchSubmit = () => {
+    setSubmittedSearch(searchInput.trim());
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput("");
+    setSubmittedSearch("");
   };
 
   const handleLoadMoreActive = async () => {
@@ -642,13 +661,29 @@ export default function DashboardJobList({
     );
   }
 
-  const tableItems = currentTab === "active"
+  const filteredItemsByTab = currentTab === "active"
     ? activeFilter === "all"
       ? activeItems
       : activeFilter === "main_flow"
         ? mainFlowItems
         : precheckItems
     : completedItems;
+
+  const normalizedSubmittedSearch = normalizeSearchableText(submittedSearch);
+  const hasSubmittedSearch = normalizedSubmittedSearch.length > 0;
+  const tableItems = hasSubmittedSearch
+    ? filteredItemsByTab.filter((job) => {
+      const metadata = getJobPeopleAndDepartment(job);
+      const searchableValues = [
+        getJobTitle(job),
+        formatJobCode(job.id),
+        metadata.primaryPerson,
+        metadata.department
+      ];
+
+      return searchableValues.some((value) => normalizeSearchableText(value).includes(normalizedSubmittedSearch));
+    })
+    : filteredItemsByTab;
 
   return (
     <>
@@ -676,41 +711,79 @@ export default function DashboardJobList({
           งานที่เสร็จแล้ว
         </button>
       </div>
-      {currentTab === "active" ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        {currentTab === "active" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveFilter("all")}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+                activeFilter === "all" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              ทั้งหมด
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFilter("main_flow")}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+                activeFilter === "main_flow"
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              กระบวนการหลัก
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFilter("precheck")}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+                activeFilter === "precheck"
+                  ? "border-yellow-600 bg-yellow-500 text-white"
+                  : "border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
+              }`}
+            >
+              รอตรวจเบื้องต้น
+            </button>
+          </div>
+        ) : (
+          <div />
+        )}
+        <form
+          className="flex w-full flex-wrap items-center gap-2 lg:w-auto"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleSearchSubmit();
+          }}
+        >
+          <div className="relative min-w-[250px] flex-1 lg:w-[380px] lg:flex-none">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="ค้นหาชื่องาน, รหัสงาน หรือผู้ยื่น..."
+              className="focus-ring w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm text-slate-700 shadow-sm placeholder:text-slate-400"
+              aria-label="ค้นหารายการงาน"
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="focus-ring absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                aria-label="ล้างคำค้นหา"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            ) : null}
+          </div>
           <button
-            type="button"
-            onClick={() => setActiveFilter("all")}
-            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
-              activeFilter === "all" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
+            type="submit"
+            className="focus-ring inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-purple-600 via-fuchsia-500 to-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(147,51,234,0.28)] transition hover:brightness-105"
           >
-            ทั้งหมด
+            Search
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveFilter("main_flow")}
-            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
-              activeFilter === "main_flow"
-                ? "border-slate-900 bg-slate-900 text-white"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            กระบวนการหลัก
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveFilter("precheck")}
-            className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
-              activeFilter === "precheck"
-                ? "border-yellow-600 bg-yellow-500 text-white"
-                : "border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
-            }`}
-          >
-            รอตรวจเบื้องต้น
-          </button>
-        </div>
-      ) : null}
+        </form>
+      </div>
 
       <div className="mt-2 overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-[var(--soft-shadow)]">
         <div className="hidden grid-cols-12 gap-3 border-b border-gray-100 bg-white px-6 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:grid">
@@ -833,7 +906,11 @@ export default function DashboardJobList({
 
             {!isCompletedLoading && tableItems.length === 0 ? (
               <div className="px-6 py-10 text-center text-sm text-slate-500">
-                {currentTab === "active" ? "ไม่มีงานที่กำลังดำเนินการ" : "ยังไม่มีงานที่เสร็จแล้ว"}
+                {hasSubmittedSearch
+                  ? "ไม่พบรายการที่ค้นหา"
+                  : currentTab === "active"
+                    ? "ไม่มีงานที่กำลังดำเนินการ"
+                    : "ยังไม่มีงานที่เสร็จแล้ว"}
               </div>
             ) : null}
           </div>
