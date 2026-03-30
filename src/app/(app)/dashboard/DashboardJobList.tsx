@@ -46,6 +46,13 @@ type JobPayload = Record<string, unknown> & {
   vendor_name?: unknown;
   tax_id?: unknown;
   items?: unknown;
+  subtotal?: unknown;
+  vat_amount?: unknown;
+  vat_rate?: unknown;
+  vat_type?: unknown;
+  vat_mode?: unknown;
+  total_amount?: unknown;
+  grand_total?: unknown;
   department?: unknown;
   assignee?: unknown;
   assignee_name?: unknown;
@@ -201,7 +208,12 @@ const parseJobPayload = (value: unknown): JobPayload => {
   return {};
 };
 
-const getGrandTotal = (itemsValue: unknown): number | null => {
+const toFiniteNumber = (value: unknown): number | null => {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sumItemTotals = (itemsValue: unknown): number | null => {
   if (!Array.isArray(itemsValue)) {
     return null;
   }
@@ -212,8 +224,8 @@ const getGrandTotal = (itemsValue: unknown): number | null => {
     }
 
     const current = item as Record<string, unknown>;
-    const value = typeof current.total === "number" ? current.total : Number(current.total);
-    if (!Number.isFinite(value)) {
+    const value = toFiniteNumber(current.total);
+    if (value === null) {
       return sum;
     }
 
@@ -221,6 +233,29 @@ const getGrandTotal = (itemsValue: unknown): number | null => {
   }, 0);
 
   return Number.isFinite(total) ? total : null;
+};
+
+const getProcurementBudgetTotal = (payload: JobPayload): number | null => {
+  const payloadTotalAmount = toFiniteNumber(payload.total_amount);
+  const payloadGrandTotal = toFiniteNumber(payload.grand_total);
+  const subtotal = toFiniteNumber(payload.subtotal) ?? sumItemTotals(payload.items) ?? 0;
+  const vatRatePercent = toFiniteNumber(payload.vat_rate) ?? 7;
+  const vatAmountFromPayload = toFiniteNumber(payload.vat_amount);
+  const vatTypeRaw = asTrimmedString(payload.vat_type || payload.vat_mode).toLowerCase();
+
+  const vatType = vatTypeRaw === "excluded" || vatTypeRaw === "included" || vatTypeRaw === "none" ? vatTypeRaw : "none";
+  const computedVatAmount = vatAmountFromPayload ?? (vatType === "excluded" ? subtotal * (vatRatePercent / 100) : 0);
+  const finalTotalAmount =
+    payloadTotalAmount ?? payloadGrandTotal ?? (vatType === "excluded" ? subtotal + computedVatAmount : subtotal);
+
+  console.log("[dashboard] e-procurement budget mapping", {
+    subtotal,
+    vat_amount: computedVatAmount,
+    vat_type: vatType,
+    total_amount: finalTotalAmount
+  });
+
+  return Number.isFinite(finalTotalAmount) ? finalTotalAmount : null;
 };
 
 const getStatusLabel = (status: EffectiveStatus): string =>
@@ -455,7 +490,7 @@ export default function DashboardJobList({
       detailsText: asTrimmedString(payload.subject_detail),
       vendorName: asTrimmedString(payload.vendor_name),
       taxId: asTrimmedString(payload.tax_id) || asTrimmedString(job.tax_id),
-      grandTotal: getGrandTotal(payload.items)
+      grandTotal: getProcurementBudgetTotal(payload)
     });
     setErrorMessage(null);
     setPaymentErrorMessage(null);
