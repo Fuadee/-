@@ -57,7 +57,7 @@ test("handleStatusClick equivalent: build modal state from job payload string", 
     }
   });
 
-  assert.equal(dialog.detailsText, "ซื้อครุภัณฑ์ - สำหรับใช้งานโครงการ");
+  assert.equal(dialog.detailsText, "ซื้อครุภัณฑ์");
   assert.equal(dialog.vendorName, "บริษัท บี จำกัด");
   assert.equal(dialog.taxId, "0099999999999");
   assert.equal(dialog.grandTotal, 12000);

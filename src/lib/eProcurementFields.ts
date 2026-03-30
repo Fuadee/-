@@ -153,29 +153,7 @@ const sumItemsSubtotal = (payload: LooseObject): EProcurementValue<number | null
 };
 
 export const getEProcurementSummary = (payloadInput: unknown): EProcurementValue<string> => {
-  const subject = firstNonEmptyString(payloadInput, ["subject", "title", "case_title", "name"]);
-  const subjectDetail = firstNonEmptyString(payloadInput, ["subject_detail", "purpose"]);
-
-  if (subject.value && subjectDetail.value) {
-    if (subject.value.includes(subjectDetail.value)) {
-      return { value: subject.value, source: `${subject.source}(contains ${subjectDetail.source})` };
-    }
-
-    return {
-      value: `${subject.value} - ${subjectDetail.value}`.trim(),
-      source: `${subject.source}+${subjectDetail.source}`
-    };
-  }
-
-  if (subject.value) {
-    return subject;
-  }
-
-  if (subjectDetail.value) {
-    return subjectDetail;
-  }
-
-  return { value: "", source: "none" };
+  return firstNonEmptyString(payloadInput, ["subject", "title", "case_title", "name"]);
 };
 
 export const getEProcurementVendorName = (payloadInput: unknown): EProcurementValue<string> => {
