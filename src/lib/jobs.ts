@@ -41,6 +41,7 @@ type InformationSchemaTableRow = {
 };
 
 const SCHEMA_CACHE_TTL_MS = 30 * 60 * 1000;
+const isJobsSchemaPerfLogEnabled = process.env.DASHBOARD_SCHEMA_PERF_LOG === "1";
 
 type CachedValue<T> = {
   expiresAt: number;
@@ -71,15 +72,29 @@ const cacheValueWithTtl = <T>(value: T): CachedValue<T> => ({
   value
 });
 
+const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+
+const logJobsSchemaPerf = (message: string): void => {
+  if (!isJobsSchemaPerfLogEnabled) {
+    return;
+  }
+
+  console.info(`[dashboard-schema-perf] ${message}`);
+};
+
 async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
   if (hasFreshValue(schemaWarmupCache)) {
+    logJobsSchemaPerf("warm-schema-cache-hit");
     return schemaWarmupCache.value;
   }
 
   if (schemaWarmupCache?.promise) {
+    logJobsSchemaPerf("warm-schema-await-inflight");
     return schemaWarmupCache.promise;
   }
 
+  const startedAt = performance.now();
+  logJobsSchemaPerf("warm-schema-query-start");
   const resolutionPromise = (async () => {
     const { data, error } = await supabase
       .schema("information_schema")
@@ -89,6 +104,7 @@ async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
       .in("table_name", [...JOB_TABLE_CANDIDATES]);
 
     if (error || !data) {
+      logJobsSchemaPerf(`warm-schema-query-end duration=${formatDurationMs(performance.now() - startedAt)} success=false`);
       return false;
     }
 
@@ -121,6 +137,9 @@ async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
     }
 
     jobsTableCache = cacheValueWithTtl(resolvedTable);
+    logJobsSchemaPerf(
+      `warm-schema-query-end duration=${formatDurationMs(performance.now() - startedAt)} success=true table=${resolvedTable ?? "none"}`
+    );
     return true;
   })();
 
@@ -153,11 +172,14 @@ export type JobRecord = Record<string, unknown> & {
 
 export async function resolveJobsTable(supabase: SupabaseClient): Promise<string | null> {
   if (hasFreshValue(jobsTableCache)) {
+    logJobsSchemaPerf(`resolve-jobs-table-cache-hit table=${jobsTableCache.value ?? "none"}`);
     return jobsTableCache.value;
   }
 
+  logJobsSchemaPerf("resolve-jobs-table-cache-miss");
   await warmSchemaCaches(supabase);
   if (hasFreshValue(jobsTableCache)) {
+    logJobsSchemaPerf(`resolve-jobs-table-warm-hit table=${jobsTableCache.value ?? "none"}`);
     return jobsTableCache.value;
   }
 
@@ -166,6 +188,7 @@ export async function resolveJobsTable(supabase: SupabaseClient): Promise<string
   }
 
   const resolutionPromise = (async (): Promise<string | null> => {
+    const startedAt = performance.now();
     const { data, error } = await supabase
       .schema("information_schema")
       .from("tables")
@@ -182,13 +205,16 @@ export async function resolveJobsTable(supabase: SupabaseClient): Promise<string
 
       for (const table of JOB_TABLE_CANDIDATES) {
         if (existingTables.has(table)) {
+          logJobsSchemaPerf(`resolve-jobs-table-info-schema-end duration=${formatDurationMs(performance.now() - startedAt)} table=${table}`);
           return table;
         }
       }
 
+      logJobsSchemaPerf(`resolve-jobs-table-info-schema-end duration=${formatDurationMs(performance.now() - startedAt)} table=none`);
       return null;
     }
 
+  logJobsSchemaPerf("resolve-jobs-table-fallback-probe-start");
   const availability = await Promise.all(
     JOB_TABLE_CANDIDATES.map(async (table) => {
       const { error } = await supabase.from(table).select("id", { head: true, count: "planned" }).limit(1);
@@ -198,10 +224,12 @@ export async function resolveJobsTable(supabase: SupabaseClient): Promise<string
 
   for (const table of JOB_TABLE_CANDIDATES) {
     if (availability.find((entry) => entry.table === table)?.exists) {
+      logJobsSchemaPerf(`resolve-jobs-table-fallback-probe-end duration=${formatDurationMs(performance.now() - startedAt)} table=${table}`);
       return table;
     }
   }
 
+  logJobsSchemaPerf(`resolve-jobs-table-fallback-probe-end duration=${formatDurationMs(performance.now() - startedAt)} table=none`);
   return null;
   })();
 
@@ -246,6 +274,7 @@ async function resolveColumnsForTable(supabase: SupabaseClient, table: string): 
   const cacheEntry = columnsByTableCache.get(table);
 
   if (hasFreshValue(cacheEntry)) {
+    logJobsSchemaPerf(`resolve-columns-cache-hit table=${table}`);
     return cacheEntry.value ? new Set(cacheEntry.value) : null;
   }
 
@@ -257,9 +286,12 @@ async function resolveColumnsForTable(supabase: SupabaseClient, table: string): 
   await warmSchemaCaches(supabase);
   const warmedCacheEntry = columnsByTableCache.get(table);
   if (hasFreshValue(warmedCacheEntry)) {
+    logJobsSchemaPerf(`resolve-columns-warm-hit table=${table}`);
     return warmedCacheEntry.value ? new Set(warmedCacheEntry.value) : null;
   }
 
+  const startedAt = performance.now();
+  logJobsSchemaPerf(`resolve-columns-introspect-start table=${table}`);
   const resolutionPromise = introspectColumns(supabase, table);
   columnsByTableCache.set(table, {
     expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
@@ -268,6 +300,9 @@ async function resolveColumnsForTable(supabase: SupabaseClient, table: string): 
 
   try {
     const value = await resolutionPromise;
+    logJobsSchemaPerf(
+      `resolve-columns-introspect-end table=${table} duration=${formatDurationMs(performance.now() - startedAt)} columns=${value?.size ?? 0}`
+    );
     columnsByTableCache.set(table, {
       expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
       value: value ? new Set(value) : null
