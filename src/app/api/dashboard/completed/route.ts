@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import {
+  DASHBOARD_PROJECTION_SELECT,
+  mapProjectionRowToJobRecord,
+  projectionEnabled,
+  type DashboardProjectionRow
+} from "@/lib/dashboardProjection";
 import { resolveAvailableColumns, resolveJobsTable } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -91,6 +97,30 @@ export async function GET() {
 
   if (!user) {
     return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
+  }
+
+  if (projectionEnabled()) {
+    const { data, error } = await supabase
+      .from("dashboard_jobs_projection")
+      .select(DASHBOARD_PROJECTION_SELECT)
+      .eq("is_completed", true)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
+    }
+
+    console.info("[dashboard-projection] api-dashboard-completed", {
+      source: "projection",
+      queryCountPerRequest: 1,
+      rows: (data ?? []).length
+    });
+    return NextResponse.json({
+      jobs: ((data ?? []) as DashboardProjectionRow[]).map(mapProjectionRowToJobRecord),
+      nextPageToken: null
+    });
   }
 
   const table = await resolveJobsTable(supabase);

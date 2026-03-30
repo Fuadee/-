@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { upsertDashboardProjectionFromJobRecord } from "@/lib/dashboardProjection";
 import { sendLineGroupNotification } from "@/lib/line";
 import {
   buildNeedsFixReturnedToPrecheckLineMessage,
@@ -18,6 +19,8 @@ type UpdateStatusPayload = {
 };
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+const resolveActorName = (user: { email?: string | null; user_metadata?: Record<string, unknown> | null } | null): string | null =>
+  asTrimmedString(user?.user_metadata?.full_name) || asTrimmedString(user?.user_metadata?.name) || asTrimmedString(user?.email) || null;
 
 const parseJobPayload = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -385,6 +388,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!job) {
       return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
     }
+    try {
+      await upsertDashboardProjectionFromJobRecord(supabase, job, resolveActorName(user));
+    } catch (projectionError) {
+      console.error("[dashboard-projection] sync-after-mark-payment-done-failed", { jobId: params.id, projectionError });
+    }
 
     return NextResponse.json({ job });
   }
@@ -451,6 +459,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const job = ((data ?? [])[0] ?? null) as JobRecord | null;
     if (!job) {
       return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
+    }
+    try {
+      await upsertDashboardProjectionFromJobRecord(supabase, job, resolveActorName(user));
+    } catch (projectionError) {
+      console.error("[dashboard-projection] sync-after-needs-fix-failed", { jobId: params.id, projectionError });
     }
 
     const assigneeNameFromJob = getAssigneeDisplayNameFromJob(job);
@@ -563,6 +576,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   const job = ((data ?? [])[0] ?? null) as JobRecord | null;
   if (!job) {
     return NextResponse.json({ message: "ไม่พบงานเอกสาร หรือไม่มีสิทธิ์เข้าถึง" }, { status: 404 });
+  }
+  try {
+    await upsertDashboardProjectionFromJobRecord(supabase, job, resolveActorName(user));
+  } catch (projectionError) {
+    console.error("[dashboard-projection] sync-after-status-update-failed", { jobId: params.id, projectionError });
   }
 
   if (nextStatus === "paid") {
