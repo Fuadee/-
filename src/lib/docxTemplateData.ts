@@ -128,7 +128,7 @@ const buildReceiptNoDateLine = (receiptNo: string, receiptDateThai: string): str
   const hasReceiptDate = Boolean(receiptDateThai);
 
   if (hasReceiptNo && hasReceiptDate) {
-    return `เลขที่ใบเสร็จ ${receiptNo} ลงวันที่ ${receiptDateThai}`;
+    return `เลขที่ใบเสร็จ/1234 ${receiptNo} ลงวันที่ ${receiptDateThai}`;
   }
 
   if (hasReceiptNo) {

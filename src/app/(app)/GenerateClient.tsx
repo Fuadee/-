@@ -1382,7 +1382,7 @@ export default function GenerateClient() {
                 <div className={`${styles.field} ${styles.fullWidth}`}>
                   <div className={styles.receiptRow}>
   <div className={`${styles.field} ${styles.fieldNoMargin}`}>
-    <label htmlFor="receipt_no">เลขที่ใบเสร็จ</label>
+    <label htmlFor="receipt_no">เลขที่ใบเสร็จ/บิลเงินสด/ใบกำกับภาษี</label>
     <input
       id="receipt_no"
       name="receipt_no"
