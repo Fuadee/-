@@ -163,6 +163,7 @@ type CachedPlan = {
 };
 
 let dashboardPlanCache: CachedPlan | null = null;
+let dashboardPlanPromise: Promise<DashboardQueryPlan> | null = null;
 
 const hasFreshPlan = (entry: CachedPlan | null): entry is CachedPlan => Boolean(entry && entry.expiresAt > Date.now());
 
@@ -182,45 +183,73 @@ const resolveDashboardQueryPlan = async (
     return dashboardPlanCache.plan;
   }
 
-  const schemaResult = await trace.measureAsync("schema-resolve", async () => resolveJobsSchemaForCandidates(supabase, DASHBOARD_JOBS_FIELD_CANDIDATES));
-  if (!schemaResult.table) {
-    throw new Error("ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล");
+  if (dashboardPlanPromise) {
+    return dashboardPlanPromise;
   }
 
-  const schemaSafeColumns = new Set(schemaResult.availableColumns);
-  const dynamicColumns = DASHBOARD_JOBS_FIELD_CANDIDATES.filter((column) => schemaSafeColumns.has(column) && column !== "user_id");
-  if (!dynamicColumns.includes("id")) {
-    throw new Error("ตารางงานเอกสารต้องมีคอลัมน์ id");
+  dashboardPlanPromise = (async () => {
+    const schemaResult = await trace.measureAsync("schema-resolve", async () =>
+      resolveJobsSchemaForCandidates(supabase, DASHBOARD_JOBS_FIELD_CANDIDATES)
+    );
+    if (!schemaResult.table) {
+      throw new Error("ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล");
+    }
+
+    const schemaSafeColumns = new Set(schemaResult.availableColumns);
+    const titleSource = resolveTitleSourceFromColumns(schemaSafeColumns);
+    const baseDynamicColumns = DASHBOARD_JOBS_FIELD_CANDIDATES.filter((column) => schemaSafeColumns.has(column) && column !== "user_id");
+    const dynamicColumns =
+      titleSource === "payload" || !baseDynamicColumns.includes("payload")
+        ? baseDynamicColumns
+        : baseDynamicColumns.filter((column) => column !== "payload");
+
+    if (!dynamicColumns.includes("id")) {
+      throw new Error("ตารางงานเอกสารต้องมีคอลัมน์ id");
+    }
+
+    const fastPathColumns = DASHBOARD_FAST_PATH_COLUMNS.filter((column) => {
+      if (column === "user_id") return false;
+      if (column === "payload" && titleSource !== "payload") return false;
+      return true;
+    });
+    const canUseFastPath =
+      DASHBOARD_ENABLE_FAST_PATH &&
+      schemaResult.table === DASHBOARD_FAST_TABLE &&
+      fastPathColumns.every((column) => schemaSafeColumns.has(column));
+
+    const plan: DashboardQueryPlan = canUseFastPath
+      ? {
+          mode: "fast",
+          table: DASHBOARD_FAST_TABLE,
+          selectableColumns: fastPathColumns,
+          hasUserIdColumn: schemaSafeColumns.has("user_id"),
+          titleSource,
+          schemaSafe: true
+        }
+      : {
+          mode: "dynamic",
+          table: schemaResult.table,
+          selectableColumns: dynamicColumns,
+          hasUserIdColumn: schemaSafeColumns.has("user_id"),
+          titleSource,
+          schemaSafe: true
+        };
+
+    dashboardPlanCache = {
+      expiresAt: Date.now() + DASHBOARD_SCHEMA_CACHE_TTL_MS,
+      plan
+    };
+    return plan;
+  })();
+
+  try {
+    return await dashboardPlanPromise;
+  } catch (error) {
+    dashboardPlanCache = null;
+    throw error;
+  } finally {
+    dashboardPlanPromise = null;
   }
-
-  const titleSource = resolveTitleSourceFromColumns(schemaSafeColumns);
-  const canUseFastPath =
-    DASHBOARD_ENABLE_FAST_PATH &&
-    schemaResult.table === DASHBOARD_FAST_TABLE &&
-    DASHBOARD_FAST_PATH_COLUMNS.filter((column) => column !== "user_id").every((column) => schemaSafeColumns.has(column));
-
-  const plan: DashboardQueryPlan = canUseFastPath
-    ? {
-        mode: "fast",
-        table: DASHBOARD_FAST_TABLE,
-        selectableColumns: DASHBOARD_FAST_PATH_COLUMNS.filter((column) => column !== "user_id"),
-        hasUserIdColumn: schemaSafeColumns.has("user_id"),
-        titleSource,
-        schemaSafe: true
-      }
-    : {
-        mode: "dynamic",
-        table: schemaResult.table,
-        selectableColumns: dynamicColumns,
-        hasUserIdColumn: schemaSafeColumns.has("user_id"),
-        titleSource,
-        schemaSafe: true
-      };
-  dashboardPlanCache = {
-    expiresAt: Date.now() + DASHBOARD_SCHEMA_CACHE_TTL_MS,
-    plan
-  };
-  return plan;
 };
 
 const isCompletedStatus = (value: unknown): boolean => {
@@ -302,9 +331,16 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
       throw new Error(`ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsQueryResult.error.message}`);
     }
 
-    const jobs = await trace.measureAsync("transform-filter-active", async () =>
-      (jobsQueryResult.data ?? []).filter((job) => !isCompletedStatus(job.status))
-    );
+    const jobs = await trace.measureAsync("transform-filter-active", async () => {
+      const activeJobs: JobRecord[] = [];
+      for (const job of jobsQueryResult.data ?? []) {
+        if (isCompletedStatus(job.status)) {
+          continue;
+        }
+        activeJobs.push(job as JobRecord);
+      }
+      return activeJobs;
+    });
     trace.flush("ok", { fastPathUsed, fallbackUsed, queryCount, selectedPath, selectedTitleSource, schemaSafe });
 
     return {
