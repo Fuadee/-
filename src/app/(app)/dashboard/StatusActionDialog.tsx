@@ -76,6 +76,7 @@ function UpdateStatusCopySection({ detailsText, vendorName, taxId, grandTotal }:
       {
         key: "median_price",
         label: "ราคากลาง (รวมภาษีมูลค่าเพิ่ม)",
+        // TODO: If backend adds a dedicated median price field, map it separately from total incl. VAT.
         value: moneyText === "-" ? "" : moneyText
       },
       {
