@@ -243,6 +243,16 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
     );
 
     if (jobsQueryResult.error) {
+      await trace.measureAsync(
+        "jobs-query-failure-classification",
+        async () => {
+          logDashboardPerf(
+            `[dashboard-perf] dashboard-rsc-jobs-fast-path-failed request_id=${trace.requestId} code=${
+              jobsQueryResult.error?.code ?? "unknown"
+            } message=${jobsQueryResult.error?.message ?? "unknown"}`
+          );
+        }
+      );
       throw new Error(`ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsQueryResult.error.message}`);
     }
 
