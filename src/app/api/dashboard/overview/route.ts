@@ -147,11 +147,20 @@ const hasFreshStaticProbeCache = (
 ): entry is StaticProbeCache => Boolean(entry && entry.expiresAt > Date.now());
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
+const isDashboardOverviewPerfLogEnabled = process.env.NODE_ENV === "development" || process.env.DASHBOARD_PERF_LOG === "1";
+const logDashboardOverviewPerf = (message: string): void => {
+  if (!isDashboardOverviewPerfLogEnabled) {
+    return;
+  }
+
+  console.info(message);
+};
+
 const createPerfStepLogger = (name: string): (() => void) => {
   const start = performance.now();
-  console.info(`${name}-start`);
+  logDashboardOverviewPerf(`${name}-start`);
   return () => {
-    console.info(`${name}-end: ${formatDurationMs(performance.now() - start)}`);
+    logDashboardOverviewPerf(`${name}-end: ${formatDurationMs(performance.now() - start)}`);
   };
 };
 
@@ -268,7 +277,7 @@ const resolveDashboardSchema = async (
 ): Promise<DashboardSchemaResolution> => {
   const schemaResolveStart = performance.now();
   const staticSchemaDecision = resolveStaticDashboardSchemaDecision();
-  console.info("dashboard-overview-schema-resolve-start");
+  logDashboardOverviewPerf("dashboard-overview-schema-resolve-start");
 
   if (staticSchemaDecision.enabled) {
     const predeclaredColumns = new Set(DASHBOARD_STATIC_CANONICAL_OVERVIEW_COLUMNS);
@@ -285,17 +294,17 @@ const resolveDashboardSchema = async (
           reason: staticProbeResult.reason
         };
       }
-      console.info(
+      logDashboardOverviewPerf(
         `dashboard-overview-schema-static-probe-end: ${formatDurationMs(performance.now() - staticProbeStart)} (source=${probeCacheHit ? "cache" : "probe"})`
       );
 
       if (staticProbeResult.canUse) {
         const missingMinimumColumns = getMissingColumns(predeclaredColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
         const introspectedColumns = toSortedColumnList(predeclaredColumns);
-        console.info("dashboard-overview-static-schema-short-circuit: enabled");
-        console.info("dashboard-overview-schema-cache: skipped");
-        console.info("dashboard-overview-schema-introspection-skipped: static-predeclared-sufficient");
-        console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+        logDashboardOverviewPerf("dashboard-overview-static-schema-short-circuit: enabled");
+        logDashboardOverviewPerf("dashboard-overview-schema-cache: skipped");
+        logDashboardOverviewPerf("dashboard-overview-schema-introspection-skipped: static-predeclared-sufficient");
+        logDashboardOverviewPerf(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
 
         return {
           table: DASHBOARD_CANONICAL_TABLE,
@@ -307,25 +316,25 @@ const resolveDashboardSchema = async (
         };
       }
 
-      console.info(`dashboard-overview-static-schema-short-circuit: disabled (reason=${staticProbeResult.reason})`);
-      console.info(`dashboard-overview-schema-introspection-attempted: fallback-required (${staticProbeResult.reason})`);
+      logDashboardOverviewPerf(`dashboard-overview-static-schema-short-circuit: disabled (reason=${staticProbeResult.reason})`);
+      logDashboardOverviewPerf(`dashboard-overview-schema-introspection-attempted: fallback-required (${staticProbeResult.reason})`);
     } else {
-      console.info("dashboard-overview-static-schema-short-circuit: disabled (reason=flag-off)");
-      console.info("dashboard-overview-schema-introspection-attempted: short-circuit-disabled");
+      logDashboardOverviewPerf("dashboard-overview-static-schema-short-circuit: disabled (reason=flag-off)");
+      logDashboardOverviewPerf("dashboard-overview-schema-introspection-attempted: short-circuit-disabled");
     }
 
     const { availableColumns: canonicalColumns, source: staticColumnsSource, cacheHit } = await resolveStaticGeneratedDocsColumns(supabase);
     const missingMinimumColumns = getMissingColumns(canonicalColumns, DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES);
     const introspectedColumns = toSortedColumnList(canonicalColumns);
 
-    console.info(`dashboard-overview-schema-cache-${cacheHit ? "hit" : "miss"}`);
-    console.info(`dashboard-overview-static-columns-source: ${staticColumnsSource}`);
-    console.info("dashboard-overview-schema-introspection-attempted: true");
+    logDashboardOverviewPerf(`dashboard-overview-schema-cache-${cacheHit ? "hit" : "miss"}`);
+    logDashboardOverviewPerf(`dashboard-overview-static-columns-source: ${staticColumnsSource}`);
+    logDashboardOverviewPerf("dashboard-overview-schema-introspection-attempted: true");
 
     if (canonicalColumns.size === 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
-      console.info("dashboard-overview-schema-fallback-reason: canonical-table-unavailable");
-      console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+      logDashboardOverviewPerf("dashboard-overview-schema-fallback-reason: canonical-table-unavailable");
+      logDashboardOverviewPerf(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
       return {
         ...fallbackSchema,
         introspectedColumns,
@@ -338,8 +347,8 @@ const resolveDashboardSchema = async (
 
     if (missingMinimumColumns.length > 0) {
       const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
-      console.info(`dashboard-overview-schema-fallback-reason: minimum-columns-missing (${missingMinimumColumns.join(",")})`);
-      console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+      logDashboardOverviewPerf(`dashboard-overview-schema-fallback-reason: minimum-columns-missing (${missingMinimumColumns.join(",")})`);
+      logDashboardOverviewPerf(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
       return {
         ...fallbackSchema,
         introspectedColumns,
@@ -350,7 +359,7 @@ const resolveDashboardSchema = async (
       };
     }
 
-    console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+    logDashboardOverviewPerf(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
     return {
       table: DASHBOARD_CANONICAL_TABLE,
       availableColumns: canonicalColumns,
@@ -362,10 +371,10 @@ const resolveDashboardSchema = async (
   }
 
   const fallbackSchema = await resolveJobsSchemaForCandidates(supabase, DASHBOARD_FIELD_CANDIDATES);
-  console.info("dashboard-overview-static-schema-short-circuit: disabled (reason=static-schema-disabled)");
-  console.info("dashboard-overview-schema-introspection-skipped: static-schema-disabled");
-  console.info("dashboard-overview-schema-fallback-reason: static-schema-disabled");
-  console.info(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
+  logDashboardOverviewPerf("dashboard-overview-static-schema-short-circuit: disabled (reason=static-schema-disabled)");
+  logDashboardOverviewPerf("dashboard-overview-schema-introspection-skipped: static-schema-disabled");
+  logDashboardOverviewPerf("dashboard-overview-schema-fallback-reason: static-schema-disabled");
+  logDashboardOverviewPerf(`dashboard-overview-schema-resolve-end: ${formatDurationMs(performance.now() - schemaResolveStart)}`);
   return {
     ...fallbackSchema,
     introspectedColumns: toSortedColumnList(fallbackSchema.availableColumns),
@@ -414,7 +423,7 @@ export async function GET() {
       endSchemaResolveWrapper();
     }
 
-    console.info(
+    logDashboardOverviewPerf(
       `dashboard-overview-static-schema: ${staticSchemaDecision.enabled ? "enabled" : "disabled"} (reason=${staticSchemaDecision.reason}; force_static=${process.env.DASHBOARD_OVERVIEW_FORCE_STATIC ?? "unset"}; dynamic_schema=${process.env.DASHBOARD_OVERVIEW_DYNAMIC_SCHEMA ?? "unset"}; node_env=${process.env.NODE_ENV ?? "unset"})`
     );
 
@@ -422,13 +431,13 @@ export async function GET() {
     const missingMinimumColumnsLabel = missingMinimumColumns.join(",") || "none";
 
     if (schemaMode === "static") {
-      console.info(
+      logDashboardOverviewPerf(
         `dashboard-overview-schema-mode: static (table=${DASHBOARD_CANONICAL_TABLE}; columns=${conciseColumns || "none"}; required=${DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES.join(",")}; missing_required=${missingMinimumColumnsLabel})`
       );
     } else {
       const resolvedFallbackReason = fallbackReason ?? (table ? "minimum columns missing" : "no usable overview columns");
       const resolvedTable = table ?? JOB_TABLE_CANDIDATES.join("|");
-      console.info(
+      logDashboardOverviewPerf(
         `dashboard-overview-schema-mode: dynamic-fallback (reason=${resolvedFallbackReason}; table=${resolvedTable}; columns=${conciseColumns || "none"}; required=${DASHBOARD_MINIMUM_QUERY_FIELD_CANDIDATES.join(",")}; missing_required=${missingMinimumColumnsLabel})`
       );
     }
@@ -469,7 +478,7 @@ export async function GET() {
         if (hasStatusColumn) {
           const canUseSummaryRpc = table === DASHBOARD_CANONICAL_TABLE && hasUserIdColumn;
           if (canUseSummaryRpc) {
-            console.info("dashboard-overview-summary-rpc-attempted");
+            logDashboardOverviewPerf("dashboard-overview-summary-rpc-attempted");
             const endSummaryRpc = createPerfStepLogger("dashboard-overview-summary-rpc");
             const { data: summaryRows, error: summaryRpcError } = await supabase.rpc("dashboard_overview_summary", {
               p_user_id: user.id
@@ -485,9 +494,9 @@ export async function GET() {
               rejected = Number(row?.rejected ?? 0);
               completed = Number(row?.completed ?? 0);
               summaryResolvedByRpc = true;
-              console.info("dashboard-overview-summary-rpc-used-with-precheck-pending");
+              logDashboardOverviewPerf("dashboard-overview-summary-rpc-used-with-precheck-pending");
             } else {
-              console.info(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
+              logDashboardOverviewPerf(`dashboard-overview-summary-rpc-fallback: ${summaryRpcError.code ?? "unknown-error"}`);
             }
           }
 
@@ -515,10 +524,10 @@ export async function GET() {
             approved = approvedResult.count ?? 0;
             rejected = rejectedResult.count ?? 0;
             completed = completedResult.count ?? 0;
-            console.info("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
+            logDashboardOverviewPerf("dashboard-overview-summary-rpc-skipped-or-fallback-to-count-queries");
           }
         } else {
-          console.info("dashboard-overview-summary-status-column-missing: total-only");
+          logDashboardOverviewPerf("dashboard-overview-summary-status-column-missing: total-only");
           const endTotalOnlyCount = createPerfStepLogger("dashboard-overview-summary-total-count");
           const { count: totalCount, error: totalError } = await buildCountQuery();
           endTotalOnlyCount();
@@ -541,7 +550,7 @@ export async function GET() {
       const endJobsQuery = createPerfStepLogger("dashboard-overview-jobs-query");
       try {
         if (availableColumns.has("payload")) {
-          console.info("dashboard-overview-jobs-payload-column-retained: title-fallback-required");
+          logDashboardOverviewPerf("dashboard-overview-jobs-payload-column-retained: title-fallback-required");
         }
         let jobsQuery = supabase.from(table).select(selectedColumns.join(","));
 

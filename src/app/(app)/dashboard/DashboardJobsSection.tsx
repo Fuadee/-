@@ -2,7 +2,7 @@ import DashboardJobList from "./DashboardJobList";
 import { fetchDashboardJobsOnServer } from "./data";
 
 export default async function DashboardJobsSection() {
-  const shouldLogPerf = process.env.NODE_ENV === "development";
+  const shouldLogPerf = process.env.NODE_ENV === "development" || process.env.DASHBOARD_PERF_LOG === "1";
   const startedAt = performance.now();
   if (shouldLogPerf) {
     console.info("[dashboard-perf] jobs-section-render-start");
