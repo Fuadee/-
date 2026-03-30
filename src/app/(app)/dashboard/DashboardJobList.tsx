@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
+import { buildEProcurementDialogState, parseJobPayloadForDialog } from "@/lib/eProcurementDialog";
 import { getEProcurementCardData } from "@/lib/eProcurementFields";
 import { type EffectiveStatus } from "./StatusActionDialog";
 
@@ -193,20 +194,49 @@ const asTrimmedString = (value: unknown): string => {
 };
 
 const parseJobPayload = (value: unknown): JobPayload => {
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return typeof parsed === "object" && parsed !== null ? (parsed as JobPayload) : {};
-    } catch {
-      return {};
+  return parseJobPayloadForDialog(value) as JobPayload;
+};
+
+const listDeepKeys = (value: unknown, maxDepth = 3, prefix = ""): string[] => {
+  if (maxDepth < 0 || !value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  const objectValue = value as Record<string, unknown>;
+  const results: string[] = [];
+  for (const [key, child] of Object.entries(objectValue)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    results.push(path);
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      results.push(...listDeepKeys(child, maxDepth - 1, path));
     }
   }
 
-  if (typeof value === "object" && value !== null) {
-    return value as JobPayload;
+  return results;
+};
+
+const getInspectableJobShape = (job: JobRecord) => {
+  const parsedPayload = parseJobPayload(job.payload);
+  return {
+    keys: Object.keys(job),
+    payload_type: Array.isArray(job.payload) ? "array" : job.payload === null ? "null" : typeof job.payload,
+    payload_keys: Object.keys(parsedPayload),
+    payload_deep_keys: listDeepKeys(parsedPayload, 3)
+  };
+};
+
+const fetchJobForDialog = async (jobId: string): Promise<JobRecord | null> => {
+  const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
+  if (!response.ok) {
+    return null;
   }
 
-  return {};
+  const payload = (await response.json().catch(() => null)) as { job?: JobRecord } | null;
+  if (!payload?.job || typeof payload.job !== "object") {
+    return null;
+  }
+
+  return payload.job;
 };
 
 const getStatusLabel = (status: EffectiveStatus): string =>
@@ -296,6 +326,19 @@ export default function DashboardJobList({
     setItems(measureDashboardPerf("jobs-list-transform-props-map", () => jobs.map(toDashboardItem)));
     setHasMoreActiveItems(hasMoreInitialJobs);
   }, [hasMoreInitialJobs, jobs]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || items.length === 0) {
+      return;
+    }
+
+    const sample = items[0];
+    console.info("[dashboard] client-jobs-sample", {
+      total_rows: items.length,
+      sample_keys: Object.keys(sample),
+      sample_shape: getInspectableJobShape(sample)
+    });
+  }, [items]);
 
   const activeItems = useMemo(() => items.filter((item) => !isCompletedStatus(item) && !item.isRemoving), [items]);
   const precheckItems = useMemo(
@@ -428,16 +471,25 @@ export default function DashboardJobList({
     }, 250);
   };
 
-  const handleStatusClick = (job: DashboardJobItem, status: EffectiveStatus) => {
+  const handleStatusClick = async (job: DashboardJobItem, status: EffectiveStatus) => {
     const id = String(job.id ?? "");
-    const title = getJobTitle(job);
-    const payload = parseJobPayload(job.payload);
+    const detailedJob = await fetchJobForDialog(id);
+    const sourceJob = detailedJob ?? job;
+    const title = getJobTitle(sourceJob);
+    const payload = parseJobPayload(sourceJob.payload);
 
     const eProcurement = getEProcurementCardData(payload);
 
     if (process.env.NODE_ENV === "development") {
+      console.info("[dashboard] status-click job", {
+        clicked_job: getInspectableJobShape(job),
+        fetched_job: detailedJob ? getInspectableJobShape(detailedJob) : null
+      });
+      console.info("[dashboard] status-click payload", payload);
       console.info("[dashboard] e-procurement mapping", {
         payload_keys: Object.keys(payload),
+        payload_deep_keys: listDeepKeys(payload, 3),
+        payload_type: eProcurement.payloadType,
         summary_source: eProcurement.summary.source,
         vendor_source: eProcurement.vendorName.source,
         tax_id_source: eProcurement.taxId.source,
@@ -445,16 +497,18 @@ export default function DashboardJobList({
       });
     }
 
-    setDialog({
+    const nextDialog: NonNullable<DialogState> = buildEProcurementDialogState({
       id,
       title,
       status,
-      returnFromStatus: asTrimmedString(job.return_from_status),
-      detailsText: eProcurement.summary.value,
-      vendorName: eProcurement.vendorName.value,
-      taxId: eProcurement.taxId.value || asTrimmedString(job.tax_id),
-      grandTotal: eProcurement.totalInclVat.value
-    });
+      job: sourceJob
+    }) as NonNullable<DialogState>;
+
+    if (process.env.NODE_ENV === "development") {
+      console.info("[dashboard] dialog-state-before-set", nextDialog);
+    }
+
+    setDialog(nextDialog);
     setErrorMessage(null);
     setPaymentErrorMessage(null);
     setPaymentSuccessMessage(null);

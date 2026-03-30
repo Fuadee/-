@@ -47,6 +47,25 @@ const createDashboardPerfTimer = (name: string): (() => void) => {
   };
 };
 
+const parsePayloadForDebug = (value: unknown): Record<string, unknown> => {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+};
+
 const asUserId = (value: unknown): string | null => {
   if (typeof value !== "string") {
     return null;
@@ -142,6 +161,16 @@ export async function GET() {
       queryCountPerRequest: 1,
       rows: (data ?? []).length
     });
+    if (isDashboardPerfLogEnabled && Array.isArray(data) && data.length > 0) {
+      const sampleRow = data[0] as Record<string, unknown>;
+      const payloadForDebug = parsePayloadForDebug(sampleRow.payload);
+      console.info("[dashboard] api-jobs-response-sample", {
+        source: "projection",
+        sample_row_keys: Object.keys(sampleRow),
+        payload_type: sampleRow.payload === null ? "null" : Array.isArray(sampleRow.payload) ? "array" : typeof sampleRow.payload,
+        payload_keys: Object.keys(payloadForDebug)
+      });
+    }
     endRoute();
     return NextResponse.json({
       jobs: ((data ?? []) as DashboardProjectionRow[]).map(mapProjectionRowToJobRecord)
@@ -191,6 +220,17 @@ export async function GET() {
   const jobs = await enrichJobsWithCreatorName(supabase, activeJobs);
   endCreatorMap();
   endRoute();
+
+  if (isDashboardPerfLogEnabled && jobs.length > 0) {
+    const sampleRow = jobs[0] as Record<string, unknown>;
+    const payloadForDebug = parsePayloadForDebug(sampleRow.payload);
+    console.info("[dashboard] api-jobs-response-sample", {
+      source: "table",
+      sample_row_keys: Object.keys(sampleRow),
+      payload_type: sampleRow.payload === null ? "null" : Array.isArray(sampleRow.payload) ? "array" : typeof sampleRow.payload,
+      payload_keys: Object.keys(payloadForDebug)
+    });
+  }
 
   return NextResponse.json({
     jobs

@@ -12,6 +12,8 @@ type EProcurementCardData = {
   totalInclVat: EProcurementValue<number | null>;
   vendorName: EProcurementValue<string>;
   taxId: EProcurementValue<string>;
+  payloadType: string;
+  topLevelKeys: string[];
 };
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -22,6 +24,29 @@ const asObject = (value: unknown): LooseObject => {
   }
 
   return value as LooseObject;
+};
+
+const getPayloadCandidates = (payloadInput: unknown): Array<{ source: string; value: LooseObject }> => {
+  const root = asObject(payloadInput);
+  const candidates: Array<{ source: string; value: LooseObject }> = [{ source: "payload", value: root }];
+  const nestedCandidates = [
+    { key: "payload", source: "payload.payload" },
+    { key: "form", source: "payload.form" },
+    { key: "data", source: "payload.data" },
+    { key: "case", source: "payload.case" },
+    { key: "procurement", source: "payload.procurement" },
+    { key: "summary", source: "payload.summary" },
+    { key: "calculation", source: "payload.calculation" }
+  ] as const;
+
+  for (const nested of nestedCandidates) {
+    const nestedValue = asObject(root[nested.key]);
+    if (Object.keys(nestedValue).length > 0) {
+      candidates.push({ source: nested.source, value: nestedValue });
+    }
+  }
+
+  return candidates;
 };
 
 const getByPath = (payload: LooseObject, path: string): unknown => {
@@ -39,11 +64,14 @@ const getByPath = (payload: LooseObject, path: string): unknown => {
   return current;
 };
 
-const firstNonEmptyString = (payload: LooseObject, paths: string[]): EProcurementValue<string> => {
-  for (const path of paths) {
-    const resolved = asTrimmedString(getByPath(payload, path));
-    if (resolved) {
-      return { value: resolved, source: path };
+const firstNonEmptyString = (payloadInput: unknown, paths: string[]): EProcurementValue<string> => {
+  const candidates = getPayloadCandidates(payloadInput);
+  for (const candidate of candidates) {
+    for (const path of paths) {
+      const resolved = asTrimmedString(getByPath(candidate.value, path));
+      if (resolved) {
+        return { value: resolved, source: `${candidate.source}.${path}` };
+      }
     }
   }
 
@@ -125,10 +153,8 @@ const sumItemsSubtotal = (payload: LooseObject): EProcurementValue<number | null
 };
 
 export const getEProcurementSummary = (payloadInput: unknown): EProcurementValue<string> => {
-  const payload = asObject(payloadInput);
-
-  const subject = firstNonEmptyString(payload, ["subject", "title", "case_title", "name"]);
-  const subjectDetail = firstNonEmptyString(payload, ["subject_detail", "purpose"]);
+  const subject = firstNonEmptyString(payloadInput, ["subject", "title", "case_title", "name"]);
+  const subjectDetail = firstNonEmptyString(payloadInput, ["subject_detail", "purpose"]);
 
   if (subject.value && subjectDetail.value) {
     if (subject.value.includes(subjectDetail.value)) {
@@ -153,17 +179,16 @@ export const getEProcurementSummary = (payloadInput: unknown): EProcurementValue
 };
 
 export const getEProcurementVendorName = (payloadInput: unknown): EProcurementValue<string> => {
-  const payload = asObject(payloadInput);
-  return firstNonEmptyString(payload, ["vendor_name", "supplier_name", "selected_vendor", "vendor.name", "supplier.name"]);
+  return firstNonEmptyString(payloadInput, ["vendor_name", "supplier_name", "selected_vendor", "vendor.name", "supplier.name"]);
 };
 
 export const getEProcurementTaxId = (payloadInput: unknown): EProcurementValue<string> => {
-  const payload = asObject(payloadInput);
-  return firstNonEmptyString(payload, ["tax_id", "vendor_tax_id", "taxpayer_id", "vendor.tax_id", "supplier.tax_id"]);
+  return firstNonEmptyString(payloadInput, ["tax_id", "vendor_tax_id", "taxpayer_id", "vendor.tax_id", "supplier.tax_id"]);
 };
 
 export const getEProcurementTotalInclVat = (payloadInput: unknown): EProcurementValue<number | null> => {
   const payload = asObject(payloadInput);
+  const payloadCandidates = getPayloadCandidates(payloadInput);
 
   const directTotalCandidates = [
     "total",
@@ -171,22 +196,29 @@ export const getEProcurementTotalInclVat = (payloadInput: unknown): EProcurement
     "net_total",
     "total_net",
     "total_amount",
+    "calculation.total",
+    "calculation.grand_total",
+    "calculation.net_total",
     "summary.total",
     "summary.grand_total",
     "summary.net_total",
     "payload_summary.total"
   ];
 
-  for (const path of directTotalCandidates) {
-    const value = toFiniteNumber(getByPath(payload, path));
-    if (value !== null) {
-      return { value, source: path };
+  for (const candidate of payloadCandidates) {
+    for (const path of directTotalCandidates) {
+      const value = toFiniteNumber(getByPath(candidate.value, path));
+      if (value !== null) {
+        return { value, source: `${candidate.source}.${path}` };
+      }
     }
   }
 
-  const budgetAmount = toFiniteNumber(payload.budget_amount);
-  if (budgetAmount !== null) {
-    return { value: budgetAmount, source: "budget_amount" };
+  for (const candidate of payloadCandidates) {
+    const budgetAmount = toFiniteNumber(candidate.value.budget_amount);
+    if (budgetAmount !== null) {
+      return { value: budgetAmount, source: `${candidate.source}.budget_amount` };
+    }
   }
 
   const subtotal =
@@ -224,5 +256,7 @@ export const getEProcurementCardData = (payloadInput: unknown): EProcurementCard
   summary: getEProcurementSummary(payloadInput),
   totalInclVat: getEProcurementTotalInclVat(payloadInput),
   vendorName: getEProcurementVendorName(payloadInput),
-  taxId: getEProcurementTaxId(payloadInput)
+  taxId: getEProcurementTaxId(payloadInput),
+  payloadType: Array.isArray(payloadInput) ? "array" : payloadInput === null ? "null" : typeof payloadInput,
+  topLevelKeys: Object.keys(asObject(payloadInput))
 });

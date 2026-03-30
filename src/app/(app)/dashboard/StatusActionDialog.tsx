@@ -165,6 +165,19 @@ export default function StatusActionDialog({
   onRequestNeedsFix,
   onMarkPaymentDone
 }: StatusActionDialogProps) {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || !open) {
+      return;
+    }
+
+    console.info("[dashboard] status-dialog-props", {
+      detailsText,
+      vendorName,
+      taxId,
+      grandTotal
+    });
+  }, [detailsText, grandTotal, open, taxId, vendorName]);
+
   const resolvedNeedsFixReturnStatus: EffectiveStatus =
     returnFromStatus === "precheck_pending"
       ? "precheck_pending"
