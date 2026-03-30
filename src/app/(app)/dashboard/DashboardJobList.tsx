@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getJobTitle, type JobRecord } from "@/lib/jobs";
+import { getEProcurementCardData } from "@/lib/eProcurementFields";
 import { type EffectiveStatus } from "./StatusActionDialog";
 
 type DashboardJobListProps = {
@@ -206,56 +207,6 @@ const parseJobPayload = (value: unknown): JobPayload => {
   }
 
   return {};
-};
-
-const toFiniteNumber = (value: unknown): number | null => {
-  const parsed = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const sumItemTotals = (itemsValue: unknown): number | null => {
-  if (!Array.isArray(itemsValue)) {
-    return null;
-  }
-
-  const total = itemsValue.reduce((sum, item) => {
-    if (typeof item !== "object" || item === null) {
-      return sum;
-    }
-
-    const current = item as Record<string, unknown>;
-    const value = toFiniteNumber(current.total);
-    if (value === null) {
-      return sum;
-    }
-
-    return sum + value;
-  }, 0);
-
-  return Number.isFinite(total) ? total : null;
-};
-
-const getProcurementBudgetTotal = (payload: JobPayload): number | null => {
-  const payloadTotalAmount = toFiniteNumber(payload.total_amount);
-  const payloadGrandTotal = toFiniteNumber(payload.grand_total);
-  const subtotal = toFiniteNumber(payload.subtotal) ?? sumItemTotals(payload.items) ?? 0;
-  const vatRatePercent = toFiniteNumber(payload.vat_rate) ?? 7;
-  const vatAmountFromPayload = toFiniteNumber(payload.vat_amount);
-  const vatTypeRaw = asTrimmedString(payload.vat_type || payload.vat_mode).toLowerCase();
-
-  const vatType = vatTypeRaw === "excluded" || vatTypeRaw === "included" || vatTypeRaw === "none" ? vatTypeRaw : "none";
-  const computedVatAmount = vatAmountFromPayload ?? (vatType === "excluded" ? subtotal * (vatRatePercent / 100) : 0);
-  const finalTotalAmount =
-    payloadTotalAmount ?? payloadGrandTotal ?? (vatType === "excluded" ? subtotal + computedVatAmount : subtotal);
-
-  console.log("[dashboard] e-procurement budget mapping", {
-    subtotal,
-    vat_amount: computedVatAmount,
-    vat_type: vatType,
-    total_amount: finalTotalAmount
-  });
-
-  return Number.isFinite(finalTotalAmount) ? finalTotalAmount : null;
 };
 
 const getStatusLabel = (status: EffectiveStatus): string =>
@@ -482,15 +433,27 @@ export default function DashboardJobList({
     const title = getJobTitle(job);
     const payload = parseJobPayload(job.payload);
 
+    const eProcurement = getEProcurementCardData(payload);
+
+    if (process.env.NODE_ENV === "development") {
+      console.info("[dashboard] e-procurement mapping", {
+        payload_keys: Object.keys(payload),
+        summary_source: eProcurement.summary.source,
+        vendor_source: eProcurement.vendorName.source,
+        tax_id_source: eProcurement.taxId.source,
+        total_source: eProcurement.totalInclVat.source
+      });
+    }
+
     setDialog({
       id,
       title,
       status,
       returnFromStatus: asTrimmedString(job.return_from_status),
-      detailsText: asTrimmedString(payload.subject_detail),
-      vendorName: asTrimmedString(payload.vendor_name),
-      taxId: asTrimmedString(payload.tax_id) || asTrimmedString(job.tax_id),
-      grandTotal: getProcurementBudgetTotal(payload)
+      detailsText: eProcurement.summary.value,
+      vendorName: eProcurement.vendorName.value,
+      taxId: eProcurement.taxId.value || asTrimmedString(job.tax_id),
+      grandTotal: eProcurement.totalInclVat.value
     });
     setErrorMessage(null);
     setPaymentErrorMessage(null);
