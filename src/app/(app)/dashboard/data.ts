@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { headers } from "next/headers";
 
 import { resolveJobsSchemaForCandidates, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
@@ -79,6 +80,19 @@ type DashboardPerfMark = {
 };
 
 type DashboardTitleSource = "title" | "case_title" | "name" | "payload" | "none";
+type DashboardRequestContext = {
+  nextUrl: string;
+  isRscRequest: boolean;
+  hasRouterStateTree: boolean;
+};
+
+const resolveDashboardRequestContext = (): DashboardRequestContext => {
+  const headerStore = headers();
+  const nextUrl = headerStore.get("next-url") ?? "";
+  const isRscRequest = headerStore.get("rsc") === "1";
+  const hasRouterStateTree = Boolean(headerStore.get("next-router-state-tree"));
+  return { nextUrl, isRscRequest, hasRouterStateTree };
+};
 
 const createDashboardPerfTrace = (label: string): {
   requestId: string;
@@ -96,9 +110,14 @@ const createDashboardPerfTrace = (label: string): {
   ) => void;
 } => {
   const requestId = globalThis.crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+  const requestContext = resolveDashboardRequestContext();
   const startedAt = performance.now();
   const marks: DashboardPerfMark[] = [];
-  logDashboardPerf(`[dashboard-perf] ${label}-start request_id=${requestId}`);
+  logDashboardPerf(
+    `[dashboard-perf] ${label}-start request_id=${requestId} next-url=${requestContext.nextUrl || "unknown"} rsc=${
+      requestContext.isRscRequest
+    } has-router-state=${requestContext.hasRouterStateTree}`
+  );
 
   const measureAsync = async <T>(name: string, fn: () => Promise<T>, metadata?: string): Promise<T> => {
     const stepStartedAt = performance.now();
@@ -132,7 +151,9 @@ const createDashboardPerfTrace = (label: string): {
         context.fastPathUsed
       } fallback-used=${context.fallbackUsed} selected-path=${context.selectedPath} selected-title-source=${
         context.selectedTitleSource
-      } schema-safe=${context.schemaSafe} query-count-per-request=${context.queryCount} ${compactBreakdown}`
+      } schema-safe=${context.schemaSafe} query-count-per-request=${context.queryCount} next-url=${
+        requestContext.nextUrl || "unknown"
+      } rsc=${requestContext.isRscRequest} ${compactBreakdown}`
     );
   };
 
