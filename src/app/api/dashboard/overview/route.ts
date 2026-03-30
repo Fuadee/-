@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { DASHBOARD_PROJECTION_SELECT, mapProjectionRowToJobRecord, projectionEnabled, type DashboardProjectionRow } from "@/lib/dashboardProjection";
 import { JOB_TABLE_CANDIDATES, resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -404,6 +405,52 @@ export async function GET() {
 
     if (!user) {
       return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
+    }
+
+    if (projectionEnabled()) {
+      const endProjectionOverview = createPerfStepLogger("dashboard-overview-projection-query");
+      const { data, error } = await supabase
+        .from("dashboard_jobs_projection")
+        .select(DASHBOARD_PROJECTION_SELECT)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      endProjectionOverview();
+
+      if (error) {
+        return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
+      }
+
+      const rows = (data ?? []) as DashboardProjectionRow[];
+      const jobs = rows.filter((row) => !row.is_completed).slice(0, 20).map(mapProjectionRowToJobRecord);
+      const summary = rows.reduce(
+        (acc, row) => {
+          acc.total += 1;
+          if (row.is_completed) {
+            acc.completed += 1;
+            return acc;
+          }
+
+          if (row.normalized_status === "precheck_pending") acc.precheckPending += 1;
+          if (PENDING_STATUSES.includes(row.normalized_status as (typeof PENDING_STATUSES)[number])) acc.pending += 1;
+          if (APPROVED_STATUSES.includes(row.normalized_status as (typeof APPROVED_STATUSES)[number])) acc.approved += 1;
+          if (REJECTED_STATUSES.includes(row.normalized_status as (typeof REJECTED_STATUSES)[number])) acc.rejected += 1;
+          return acc;
+        },
+        { total: 0, pending: 0, precheckPending: 0, approved: 0, rejected: 0, completed: 0 }
+      );
+
+      console.info("[dashboard-projection] api-dashboard-overview", {
+        source: "projection",
+        queryCountPerRequest: 1,
+        rows: rows.length
+      });
+      return NextResponse.json({
+        summary,
+        jobs,
+        hasUserIdColumn: true,
+        currentUserId: user.id
+      });
     }
 
     const endSchemaResolveWrapper = createPerfStepLogger("dashboard-overview-schema-resolve-wrapper");

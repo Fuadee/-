@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { upsertDashboardProjectionFromJobRecord } from "@/lib/dashboardProjection";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
 const DEFAULT_NEW_JOB_STATUS = "pending_approval";
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+const resolveActorName = (user: { email?: string | null; user_metadata?: Record<string, unknown> | null } | null): string | null =>
+  asTrimmedString(user?.user_metadata?.full_name) || asTrimmedString(user?.user_metadata?.name) || asTrimmedString(user?.email) || null;
 
 const parsePayload = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
@@ -178,6 +181,11 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     const insertedJob = ((insertedRows ?? [])[0] ?? null) as unknown as JobRecord | null;
     if (!insertedJob?.id) {
       return NextResponse.json({ message: "สร้างงานใหม่ไม่สำเร็จ กรุณาลองอีกครั้ง" }, { status: 500 });
+    }
+    try {
+      await upsertDashboardProjectionFromJobRecord(supabase, insertedJob, resolveActorName(user));
+    } catch (projectionError) {
+      console.error("[dashboard-projection] sync-after-clone-failed", { jobId: String(insertedJob.id), projectionError });
     }
 
     return NextResponse.json({

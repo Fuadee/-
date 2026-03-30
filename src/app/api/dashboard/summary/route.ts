@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { projectionEnabled } from "@/lib/dashboardProjection";
 import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -52,6 +53,56 @@ export async function GET() {
 
     if (!user) {
       return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
+    }
+
+    if (projectionEnabled()) {
+      const endProjectionQuery = createDashboardPerfTimer("api-dashboard-summary-projection-query");
+      const { data, error } = await supabase
+        .from("dashboard_jobs_projection")
+        .select("normalized_status,is_completed")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      endProjectionQuery();
+
+      if (error) {
+        return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
+      }
+
+      let activeCount = 0;
+      let pendingReviewCount = 0;
+      let precheckPendingCount = 0;
+      let needsFixCount = 0;
+      let completedCount = 0;
+
+      for (const row of (data ?? []) as { normalized_status?: string; is_completed?: boolean }[]) {
+        if (row.is_completed) {
+          completedCount += 1;
+          continue;
+        }
+
+        activeCount += 1;
+        if (row.normalized_status === "precheck_pending") precheckPendingCount += 1;
+        if (row.normalized_status === "pending_review") pendingReviewCount += 1;
+        if (row.normalized_status === "needs_fix") needsFixCount += 1;
+      }
+
+      console.info("[dashboard-projection] api-dashboard-summary", {
+        source: "projection",
+        queryCountPerRequest: 1,
+        rows: (data ?? []).length
+      });
+      return NextResponse.json({
+        summary: {
+          activeCount,
+          pendingReviewCount,
+          precheckPendingCount,
+          needsFixCount,
+          completedCount
+        },
+        hasUserIdColumn: true,
+        currentUserId: user.id
+      });
     }
 
     const endResolveSchema = createDashboardPerfTimer("api-dashboard-summary-schema-resolve");

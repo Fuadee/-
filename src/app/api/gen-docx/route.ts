@@ -6,6 +6,7 @@ import PizZip from "pizzip";
 import { NextRequest, NextResponse } from "next/server";
 
 import { buildDocxTemplateData, type GeneratePayload } from "@/lib/docxTemplateData";
+import { upsertDashboardProjectionFromJobRecord } from "@/lib/dashboardProjection";
 import { resolveAvailableColumns, resolveJobsTable, type JobRecord } from "@/lib/jobs";
 import { sendLineGroupNotification } from "@/lib/line";
 import { buildPrecheckPendingLineMessage, resolveRequesterProfile } from "@/lib/lineNotifications";
@@ -33,6 +34,8 @@ const toNullableTrimmedString = (value: string | null | undefined) => {
 
 
 const asTrimmedString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+const resolveActorName = (user: { email?: string | null; user_metadata?: Record<string, unknown> | null } | null): string | null =>
+  asTrimmedString(user?.user_metadata?.full_name) || asTrimmedString(user?.user_metadata?.name) || asTrimmedString(user?.email) || null;
 
 const parsePayload = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -254,6 +257,11 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     if (!updated?.id) {
       throw new Error("ไม่พบงานเอกสารที่ต้องการแก้ไข หรือไม่มีสิทธิ์เข้าถึง");
     }
+    try {
+      await upsertDashboardProjectionFromJobRecord(supabase, updated, resolveActorName(user));
+    } catch (projectionError) {
+      console.error("[dashboard-projection] sync-after-gen-docx-update-failed", { jobId: String(updated.id), projectionError });
+    }
 
     return {
       jobId: String(updated.id),
@@ -292,6 +300,13 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   }
 
   const created = ((data ?? [])[0] ?? null) as JobRecord | null;
+  if (created?.id) {
+    try {
+      await upsertDashboardProjectionFromJobRecord(supabase, created, resolveActorName(user));
+    } catch (projectionError) {
+      console.error("[dashboard-projection] sync-after-gen-docx-create-failed", { jobId: String(created.id), projectionError });
+    }
+  }
 
   console.info("[gen-docx] resolved submission transition", {
     jobId: created?.id ? String(created.id) : null,

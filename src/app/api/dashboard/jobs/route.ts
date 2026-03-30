@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import {
+  DASHBOARD_PROJECTION_SELECT,
+  mapProjectionRowToJobRecord,
+  projectionEnabled,
+  type DashboardProjectionRow
+} from "@/lib/dashboardProjection";
 import { resolveJobsSchemaForCandidates } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -113,6 +119,33 @@ export async function GET() {
   if (!user) {
     endRoute();
     return NextResponse.json({ message: "กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard" }, { status: 401 });
+  }
+
+  if (projectionEnabled()) {
+    const endProjectionQuery = createDashboardPerfTimer("api-dashboard-jobs-projection-query");
+    const { data, error } = await supabase
+      .from("dashboard_jobs_projection")
+      .select(DASHBOARD_PROJECTION_SELECT)
+      .eq("is_completed", false)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    endProjectionQuery();
+
+    if (error) {
+      endRoute();
+      return NextResponse.json({ message: `ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${error.message}` }, { status: 500 });
+    }
+
+    console.info("[dashboard-projection] api-dashboard-jobs", {
+      source: "projection",
+      queryCountPerRequest: 1,
+      rows: (data ?? []).length
+    });
+    endRoute();
+    return NextResponse.json({
+      jobs: ((data ?? []) as DashboardProjectionRow[]).map(mapProjectionRowToJobRecord)
+    });
   }
 
   const endResolveSchema = createDashboardPerfTimer("api-dashboard-jobs-schema-resolve");

@@ -1,6 +1,12 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 
+import {
+  DASHBOARD_PROJECTION_SELECT,
+  mapProjectionRowToJobRecord,
+  projectionEnabled,
+  type DashboardProjectionRow
+} from "@/lib/dashboardProjection";
 import { resolveJobsSchemaForCandidates, type JobRecord } from "@/lib/jobs";
 import { createSupabaseServer } from "@/lib/supabase/server";
 
@@ -298,6 +304,40 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
     const user = authResult.data.user;
     if (!user) {
       throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard");
+    }
+
+    if (projectionEnabled()) {
+      const projectionResult = await trace.measureAsync("projection-query-active", async () => {
+        queryCount += 1;
+        return supabase
+          .from("dashboard_jobs_projection")
+          .select(DASHBOARD_PROJECTION_SELECT)
+          .eq("is_completed", false)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT + 1);
+      });
+
+      if (projectionResult.error) {
+        throw new Error(`ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${projectionResult.error.message}`);
+      }
+
+      const rows = ((projectionResult.data ?? []) as DashboardProjectionRow[]).map(mapProjectionRowToJobRecord);
+      trace.flush("ok", {
+        fastPathUsed: true,
+        fallbackUsed: false,
+        queryCount,
+        selectedPath: "fast",
+        selectedTitleSource: "title",
+        schemaSafe: true
+      });
+
+      return {
+        jobs: rows.slice(0, DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT),
+        hasUserIdColumn: true,
+        currentUserId: user.id,
+        isPartial: rows.length > DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT
+      };
     }
 
     const runDashboardJobsQuery = async (options: {
