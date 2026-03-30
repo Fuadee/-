@@ -76,6 +76,7 @@ function UpdateStatusCopySection({ detailsText, vendorName, taxId, grandTotal }:
       {
         key: "median_price",
         label: "ราคากลาง (รวมภาษีมูลค่าเพิ่ม)",
+        // TODO: If backend adds a dedicated median price field, map it separately from total incl. VAT.
         value: moneyText === "-" ? "" : moneyText
       },
       {
@@ -164,6 +165,19 @@ export default function StatusActionDialog({
   onRequestNeedsFix,
   onMarkPaymentDone
 }: StatusActionDialogProps) {
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development" || !open) {
+      return;
+    }
+
+    console.info("[dashboard] status-dialog-props", {
+      detailsText,
+      vendorName,
+      taxId,
+      grandTotal
+    });
+  }, [detailsText, grandTotal, open, taxId, vendorName]);
+
   const resolvedNeedsFixReturnStatus: EffectiveStatus =
     returnFromStatus === "precheck_pending"
       ? "precheck_pending"
