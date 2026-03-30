@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const JOB_TABLE_CANDIDATES = ["generated_docs", "doc_jobs", "documents", "jobs"] as const;
+const CANONICAL_JOBS_TABLE = "generated_docs";
 
 const COLUMN_PROBE_CANDIDATES = [
   "id",
@@ -55,6 +56,7 @@ export type ResolvedJobsSchema = {
 };
 
 let jobsTableCache: CachedValue<string | null> | null = null;
+let canonicalTableAvailableCache: CachedValue<boolean> | null = null;
 const columnsByTableCache = new Map<string, CachedValue<Set<string> | null>>();
 const columnsByCandidateCache = new Map<string, CachedValue<Set<string>>>();
 let schemaWarmupCache: CachedValue<boolean> | null = null;
@@ -137,6 +139,7 @@ async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
     }
 
     jobsTableCache = cacheValueWithTtl(resolvedTable);
+    canonicalTableAvailableCache = cacheValueWithTtl(Boolean(columnsByTable.get(CANONICAL_JOBS_TABLE)));
     logJobsSchemaPerf(
       `warm-schema-query-end duration=${formatDurationMs(performance.now() - startedAt)} success=true table=${resolvedTable ?? "none"}`
     );
@@ -154,6 +157,48 @@ async function warmSchemaCaches(supabase: SupabaseClient): Promise<boolean> {
     return value;
   } catch (error) {
     schemaWarmupCache = null;
+    throw error;
+  }
+}
+
+async function resolveCanonicalTableAvailability(supabase: SupabaseClient): Promise<boolean> {
+  if (hasFreshValue(canonicalTableAvailableCache)) {
+    logJobsSchemaPerf(`resolve-canonical-table-cache-hit available=${canonicalTableAvailableCache.value}`);
+    return canonicalTableAvailableCache.value;
+  }
+
+  await warmSchemaCaches(supabase);
+  if (hasFreshValue(canonicalTableAvailableCache)) {
+    logJobsSchemaPerf(`resolve-canonical-table-warm-hit available=${canonicalTableAvailableCache.value}`);
+    return canonicalTableAvailableCache.value;
+  }
+
+  if (canonicalTableAvailableCache?.promise) {
+    return canonicalTableAvailableCache.promise;
+  }
+
+  const startedAt = performance.now();
+  logJobsSchemaPerf("resolve-canonical-table-probe-start");
+  const resolutionPromise = (async () => {
+    const { error } = await supabase.from(CANONICAL_JOBS_TABLE).select("id", { head: true, count: "planned" }).limit(1);
+    const available = !error;
+    logJobsSchemaPerf(
+      `resolve-canonical-table-probe-end duration=${formatDurationMs(performance.now() - startedAt)} available=${available}`
+    );
+    return available;
+  })();
+
+  canonicalTableAvailableCache = {
+    expiresAt: Date.now() + SCHEMA_CACHE_TTL_MS,
+    promise: resolutionPromise
+  };
+
+  try {
+    const value = await resolutionPromise;
+    canonicalTableAvailableCache = cacheValueWithTtl(value);
+    return value;
+  } catch (error) {
+    canonicalTableAvailableCache = null;
     throw error;
   }
 }
@@ -177,6 +222,13 @@ export async function resolveJobsTable(supabase: SupabaseClient): Promise<string
   }
 
   logJobsSchemaPerf("resolve-jobs-table-cache-miss");
+  const canonicalTableAvailable = await resolveCanonicalTableAvailability(supabase);
+  if (canonicalTableAvailable) {
+    jobsTableCache = cacheValueWithTtl(CANONICAL_JOBS_TABLE);
+    logJobsSchemaPerf(`resolve-jobs-table-canonical-hit table=${CANONICAL_JOBS_TABLE}`);
+    return CANONICAL_JOBS_TABLE;
+  }
+
   await warmSchemaCaches(supabase);
   if (hasFreshValue(jobsTableCache)) {
     logJobsSchemaPerf(`resolve-jobs-table-warm-hit table=${jobsTableCache.value ?? "none"}`);
