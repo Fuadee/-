@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import DashboardJobsSection, { DashboardJobsSectionFallback } from "./DashboardJobsSection";
 
 export default function DashboardPage() {
-  const shouldLogPerf = process.env.NODE_ENV === "development";
+  const shouldLogPerf = process.env.NODE_ENV === "development" || process.env.DASHBOARD_PERF_LOG === "1";
   const startedAt = performance.now();
   if (shouldLogPerf) {
     console.info("[dashboard-perf] route-render-start route=/dashboard");

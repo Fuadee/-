@@ -33,6 +33,25 @@ const DASHBOARD_FETCH_MODE = "direct-data-access";
 const DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT = 10;
 const DASHBOARD_FAST_TABLE = process.env.DASHBOARD_JOBS_FAST_TABLE?.trim() || "generated_docs";
 const isDashboardPerfLogEnabled = process.env.NODE_ENV === "development" || process.env.DASHBOARD_PERF_LOG === "1";
+const DASHBOARD_FAST_PATH_COLUMNS = [
+  "id",
+  "title",
+  "case_title",
+  "name",
+  "department",
+  "created_at",
+  "status",
+  "tax_id",
+  "payload",
+  "user_id",
+  "assignee_name",
+  "assignee_id",
+  "assignee",
+  "assigned_to",
+  "assigned_to_name",
+  "requester_name",
+  "created_by"
+] as const;
 
 const formatDurationMs = (value: number): string => `${value.toFixed(3)}ms`;
 const logDashboardPerf = (message: string): void => {
@@ -90,6 +109,24 @@ const createDashboardPerfTrace = (label: string): {
   };
 
   return { requestId, measureAsync, flush };
+};
+
+const canFallbackFromFastPathError = (error: { code?: string; message?: string } | null): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  if (error.code === "42P01" || error.code === "42703" || error.code === "PGRST204") {
+    return true;
+  }
+
+  const message = error.message?.toLowerCase() ?? "";
+  return (
+    message.includes("does not exist") ||
+    message.includes("could not find the table") ||
+    message.includes("column") ||
+    message.includes("schema cache")
+  );
 };
 const asUserId = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -156,36 +193,18 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
   const endTotal = createDashboardPerfTimer("jobs-direct-total", `request_id=${trace.requestId}`);
   const supabase = createSupabaseServer();
   try {
-    const [authResult, schemaResult] = await Promise.all([
-      trace.measureAsync("auth", async () => supabase.auth.getUser()),
-      trace.measureAsync("schema-resolve", async () => resolveJobsSchemaForCandidates(supabase, DASHBOARD_JOBS_FIELD_CANDIDATES))
-    ]);
+    const authResult = await trace.measureAsync("auth", async () => supabase.auth.getUser());
 
     const user = authResult.data.user;
     if (!user) {
       throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน dashboard");
     }
 
-    let table = schemaResult.table;
-    let availableColumns = schemaResult.availableColumns;
-
-    if (!table) {
-      throw new Error("ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล");
-    }
-
-    const selectedColumns = DASHBOARD_JOBS_FIELD_CANDIDATES.filter(
-      (column) => availableColumns.has(column) && column !== "user_id"
-    );
-
-    if (!selectedColumns.includes("id")) {
-      throw new Error("ตารางงานเอกสารต้องมีคอลัมน์ id");
-    }
-
     const runDashboardJobsQuery = async (options: {
       tableName: string;
       selectableColumns: readonly string[];
       withUserFilter: boolean;
-    }): Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }> => {
+    }): Promise<{ data: Record<string, unknown>[] | null; error: { code?: string; message: string } | null }> => {
       let query = supabase.from(options.tableName).select(options.selectableColumns.join(","));
       const orderByColumn = options.selectableColumns.includes("created_at") ? "created_at" : "id";
       query = query.order(orderByColumn, { ascending: false }).limit(DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT + 1);
@@ -193,31 +212,43 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
         query = query.eq("user_id", user.id);
       }
       const { data, error } = await query;
-      return { data: ((data ?? []) as unknown) as Record<string, unknown>[], error: error ? { message: error.message } : null };
+      return {
+        data: ((data ?? []) as unknown) as Record<string, unknown>[],
+        error: error ? { code: typeof error.code === "string" ? error.code : undefined, message: error.message } : null
+      };
     };
 
-    let currentTable = table;
+    let currentTable = DASHBOARD_FAST_TABLE;
+    let availableColumns = new Set<string>(DASHBOARD_FAST_PATH_COLUMNS);
+    let usedFastPath = false;
+
+    const fastPathSelectableColumns = DASHBOARD_FAST_PATH_COLUMNS.filter((column) => column !== "user_id");
     let jobsQueryResult = await trace.measureAsync(
-      "jobs-query",
+      "jobs-query-fast-path",
       () =>
         runDashboardJobsQuery({
           tableName: currentTable,
-          selectableColumns: selectedColumns,
-          withUserFilter: availableColumns.has("user_id")
+          selectableColumns: fastPathSelectableColumns,
+          withUserFilter: true
         }),
       `table=${currentTable}`
     );
 
-    if (jobsQueryResult.error && currentTable === DASHBOARD_FAST_TABLE) {
+    if (!jobsQueryResult.error) {
+      usedFastPath = true;
+    }
+
+    if (!usedFastPath && canFallbackFromFastPathError(jobsQueryResult.error)) {
       const fallbackSchema = await trace.measureAsync("schema-resolve-fallback", async () =>
         resolveJobsSchemaForCandidates(supabase, DASHBOARD_JOBS_FIELD_CANDIDATES)
       );
       if (fallbackSchema.table) {
         currentTable = fallbackSchema.table;
         availableColumns = fallbackSchema.availableColumns;
-        const fallbackSelectedColumns = DASHBOARD_JOBS_FIELD_CANDIDATES.filter(
-          (column) => availableColumns.has(column) && column !== "user_id"
-        );
+        const fallbackSelectedColumns = DASHBOARD_JOBS_FIELD_CANDIDATES.filter((column) => availableColumns.has(column) && column !== "user_id");
+        if (!fallbackSelectedColumns.includes("id")) {
+          throw new Error("ตารางงานเอกสารต้องมีคอลัมน์ id");
+        }
         jobsQueryResult = await trace.measureAsync(
           "jobs-query-fallback",
           () =>
@@ -228,11 +259,29 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
             }),
           `table=${currentTable}`
         );
+      } else {
+        throw new Error("ไม่พบตารางงานเอกสารที่รองรับในฐานข้อมูล");
       }
     }
 
     if (jobsQueryResult.error) {
+      await trace.measureAsync(
+        "jobs-query-failure-classification",
+        async () => {
+          logDashboardPerf(
+            `[dashboard-perf] dashboard-rsc-jobs-fast-path-failed request_id=${trace.requestId} code=${
+              jobsQueryResult.error?.code ?? "unknown"
+            } message=${jobsQueryResult.error?.message ?? "unknown"}`
+          );
+        }
+      );
       throw new Error(`ไม่สามารถโหลดข้อมูลงานเอกสารได้: ${jobsQueryResult.error.message}`);
+    }
+
+    if (usedFastPath) {
+      logDashboardPerf(
+        `[dashboard-perf] dashboard-rsc-jobs-fast-path-used request_id=${trace.requestId} table=${currentTable} with_user_filter=true`
+      );
     }
 
     const rawJobs = await trace.measureAsync("transform-filter-active", async () =>
@@ -243,7 +292,7 @@ const getDashboardJobsDirect = cache(async (): Promise<DashboardJobsResponse> =>
 
     return {
       jobs: jobs.slice(0, DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT) as JobRecord[],
-      hasUserIdColumn: availableColumns.has("user_id"),
+      hasUserIdColumn: usedFastPath ? true : availableColumns.has("user_id"),
       currentUserId: user.id,
       isPartial: jobs.length > DASHBOARD_INITIAL_ACTIVE_JOBS_LIMIT
     };
