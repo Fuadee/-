@@ -48,6 +48,7 @@ type JobPayload = Record<string, unknown> & {
   items?: unknown;
   subtotal?: unknown;
   vat_amount?: unknown;
+  vat_rate?: unknown;
   vat_type?: unknown;
   vat_mode?: unknown;
   total_amount?: unknown;
@@ -238,16 +239,18 @@ const getProcurementBudgetTotal = (payload: JobPayload): number | null => {
   const payloadTotalAmount = toFiniteNumber(payload.total_amount);
   const payloadGrandTotal = toFiniteNumber(payload.grand_total);
   const subtotal = toFiniteNumber(payload.subtotal) ?? sumItemTotals(payload.items) ?? 0;
-  const vatAmount = toFiniteNumber(payload.vat_amount) ?? 0;
+  const vatRatePercent = toFiniteNumber(payload.vat_rate) ?? 7;
+  const vatAmountFromPayload = toFiniteNumber(payload.vat_amount);
   const vatTypeRaw = asTrimmedString(payload.vat_type || payload.vat_mode).toLowerCase();
 
   const vatType = vatTypeRaw === "excluded" || vatTypeRaw === "included" || vatTypeRaw === "none" ? vatTypeRaw : "none";
+  const computedVatAmount = vatAmountFromPayload ?? (vatType === "excluded" ? subtotal * (vatRatePercent / 100) : 0);
   const finalTotalAmount =
-    payloadTotalAmount ?? payloadGrandTotal ?? (vatType === "excluded" ? subtotal + vatAmount : subtotal);
+    payloadTotalAmount ?? payloadGrandTotal ?? (vatType === "excluded" ? subtotal + computedVatAmount : subtotal);
 
   console.log("[dashboard] e-procurement budget mapping", {
     subtotal,
-    vat_amount: vatAmount,
+    vat_amount: computedVatAmount,
     vat_type: vatType,
     total_amount: finalTotalAmount
   });
