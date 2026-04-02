@@ -258,6 +258,7 @@ export default function GenerateClient() {
   const [vatMode, setVatMode] = useState<VatMode | null>(null);
   const specTextareasRef = useRef<Array<HTMLTextAreaElement | null>>([]);
   const expandedSpecTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const submitInFlightRef = useRef(false);
   const MAX_SPEC_HEIGHT = 72;
   const renderedWorkflowMode = useMemo<WorkflowMode>(() => {
     if (editingJobStatus === PRECHECK_PENDING_STATUS) {
@@ -817,6 +818,14 @@ export default function GenerateClient() {
   };
 
   const handleSubmit = async (mode: SubmissionMode = "main") => {
+    if (submitInFlightRef.current) {
+      console.warn("precheck-submit-client-skipped-duplicate", {
+        mode,
+        reason: "submit already in flight"
+      });
+      return;
+    }
+
     if (!canSubmitMode(mode)) {
       console.warn("[generate-client] blocked submit by workflow mode", {
         jobId: editingJobId || null,
@@ -828,6 +837,8 @@ export default function GenerateClient() {
       });
       return;
     }
+
+    submitInFlightRef.current = true;
 
     if (mode === "precheck") {
       console.info(`${PRECHECK_DEBUG_PREFIX} precheck button clicked`, {
@@ -842,6 +853,7 @@ export default function GenerateClient() {
     if (hasValidationError(errors)) {
       setMissingFields(collectMissingFields(errors));
       setShowIncompleteModal(true);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -849,6 +861,7 @@ export default function GenerateClient() {
       setShowIncompleteModal(false);
       setMissingSpecRows(missingSpecs);
       setShowMissingSpecModal(true);
+      submitInFlightRef.current = false;
       return;
     }
 
@@ -904,6 +917,16 @@ export default function GenerateClient() {
       const requestBody: typeof payload & { submissionMode: SubmissionMode; jobId?: string } = editingJobId
         ? { ...payload, jobId: editingJobId, submissionMode: mode }
         : { ...payload, submissionMode: mode };
+      const clientRequestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const requestBodyWithId = {
+        ...requestBody,
+        clientRequestId
+      };
+      console.info("precheck-submit-client-start", {
+        mode,
+        jobId: editingJobId || null,
+        clientRequestId
+      });
 
       if (mode === "precheck") {
         console.info(`${PRECHECK_DEBUG_PREFIX} sending request`, {
@@ -918,9 +941,10 @@ export default function GenerateClient() {
       const response = await fetch(GEN_DOCX_ENDPOINT, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "x-idempotency-key": clientRequestId
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBodyWithId)
       });
 
       if (!response.ok) {
@@ -942,6 +966,11 @@ export default function GenerateClient() {
       if (mode === "precheck") {
         const precheckPayload = (await response.json().catch(() => null)) as { jobId?: string } | null;
         const createdJobId = precheckPayload?.jobId ?? null;
+        console.info("precheck-submit-client-end", {
+          mode,
+          jobId: createdJobId,
+          clientRequestId
+        });
         setSuccessMessage("บันทึกงานและส่งรอตรวจเบื้องต้นแล้ว");
         router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
         return;
@@ -963,6 +992,11 @@ export default function GenerateClient() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      console.info("precheck-submit-client-end", {
+        mode,
+        jobId: createdJobId,
+        clientRequestId
+      });
       router.push(createdJobId ? `/dashboard/${createdJobId}` : "/dashboard");
     } catch (submitError) {
       const message =
@@ -971,6 +1005,7 @@ export default function GenerateClient() {
           : "เกิดข้อผิดพลาดในการสร้างไฟล์ กรุณาลองใหม่อีกครั้ง";
       setError(message);
     } finally {
+      submitInFlightRef.current = false;
       setLoading(false);
     }
   };

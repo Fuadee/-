@@ -17,6 +17,7 @@ export const runtime = "nodejs";
 type GenerateRequestBody = GeneratePayload & {
   jobId?: string;
   submissionMode?: "main" | "precheck";
+  clientRequestId?: string;
 };
 
 const PRECHECK_DEBUG_PREFIX = "[precheck-line]";
@@ -193,6 +194,10 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   const writeData = buildPersistedData(body, availableColumns, defaultNextStatus);
 
   if (jobId) {
+    console.info("gen-docx-update-start", {
+      jobId,
+      submissionMode
+    });
     let updateQuery = supabase.from(table).update(writeData).eq("id", jobId);
 
     if (user && availableColumns.has("user_id")) {
@@ -263,6 +268,12 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
       console.error("[dashboard-projection] sync-after-gen-docx-update-failed", { jobId: String(updated.id), projectionError });
     }
 
+    console.info("gen-docx-update-success", {
+      jobId: updated?.id ? String(updated.id) : null,
+      submissionMode,
+      nextStatus
+    });
+
     return {
       jobId: String(updated.id),
       job: updated,
@@ -294,12 +305,20 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     };
   }
 
+  console.info("gen-docx-create-start", {
+    submissionMode
+  });
   const { data, error } = await supabase.from(table).insert(writeData).select("*").limit(1);
   if (error) {
     throw new Error(`ไม่สามารถบันทึกงานเอกสารได้: ${error.message}`);
   }
 
   const created = ((data ?? [])[0] ?? null) as JobRecord | null;
+  console.info("gen-docx-create-success", {
+    jobId: created?.id ? String(created.id) : null,
+    submissionMode,
+    nextStatus: defaultNextStatus
+  });
   if (created?.id) {
     try {
       await upsertDashboardProjectionFromJobRecord(supabase, created, resolveActorName(user));
@@ -333,6 +352,47 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   };
 }
 
+async function findExistingJobByClientRequestId(
+  params: {
+    clientRequestId: string;
+  }
+): Promise<{ job: JobRecord | null; table: string | null }> {
+  const supabase = createSupabaseServer();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  const table = await resolveJobsTable(supabase);
+  if (!table) {
+    return { job: null, table };
+  }
+
+  const availableColumns = await resolveAvailableColumns(supabase, table);
+  if (!availableColumns.has("payload")) {
+    return { job: null, table };
+  }
+
+  let query = supabase.from(table).select("*").contains("payload", {
+    client_request_id: params.clientRequestId
+  }).limit(1);
+
+  if (user && availableColumns.has("user_id")) {
+    query = query.eq("user_id", user.id);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("gen-docx-idempotency-lookup-error", {
+      clientRequestId: params.clientRequestId,
+      message: error.message
+    });
+    return { job: null, table };
+  }
+
+  const existingJob = ((data ?? [])[0] ?? null) as JobRecord | null;
+  return { job: existingJob, table };
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.info(`${PRECHECK_DEBUG_PREFIX} route entered`, {
@@ -341,11 +401,41 @@ export async function POST(request: NextRequest) {
     });
 
     const requestBody = (await request.json()) as GenerateRequestBody;
-    const { jobId, submissionMode = "main", ...body } = requestBody;
+    const idempotencyKeyFromHeader = asTrimmedString(request.headers.get("x-idempotency-key"));
+    const { jobId, submissionMode = "main", clientRequestId, ...body } = requestBody;
+    const resolvedClientRequestId = asTrimmedString(clientRequestId) || idempotencyKeyFromHeader || null;
+    console.info("gen-docx-route-start", {
+      submissionMode,
+      jobId: jobId ?? null,
+      clientRequestId: resolvedClientRequestId
+    });
     console.info(`${PRECHECK_DEBUG_PREFIX} parsed request body`, {
       submissionMode,
-      jobId: jobId ?? null
+      jobId: jobId ?? null,
+      clientRequestId: resolvedClientRequestId
     });
+
+    if (!jobId && resolvedClientRequestId && submissionMode === "precheck") {
+      const idempotentLookup = await findExistingJobByClientRequestId({
+        clientRequestId: resolvedClientRequestId
+      });
+      if (idempotentLookup.job?.id) {
+        const dedupedJobId = String(idempotentLookup.job.id);
+        console.info("gen-docx-route-idempotency-hit", {
+          dedupedJobId,
+          clientRequestId: resolvedClientRequestId
+        });
+        return NextResponse.json({
+          ok: true,
+          message: "บันทึกงานและส่งรอตรวจเบื้องต้นแล้ว",
+          jobId: dedupedJobId
+        });
+      }
+    }
+
+    const bodyWithClientRequestId = resolvedClientRequestId
+      ? ({ ...body, client_request_id: resolvedClientRequestId } as GeneratePayload)
+      : body;
 
     const {
       jobId: createdJobId,
@@ -357,7 +447,7 @@ export async function POST(request: NextRequest) {
       nextStatus,
       bypassPrevented,
       shouldSendPrecheckLineReason
-    } = await upsertJobRecord(body, jobId, submissionMode);
+    } = await upsertJobRecord(bodyWithClientRequestId, jobId, submissionMode);
 
     console.info(`${PRECHECK_DEBUG_PREFIX} upsert result`, {
       operation,
@@ -441,6 +531,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (submissionMode === "precheck") {
+      console.info("gen-docx-route-end", {
+        submissionMode,
+        createdJobId: createdJobId ?? null,
+        operation
+      });
       return NextResponse.json({
         ok: true,
         message: "บันทึกงานและส่งรอตรวจเบื้องต้นแล้ว",
@@ -457,7 +552,7 @@ export async function POST(request: NextRequest) {
       linebreaks: true
     });
 
-    doc.render(buildDocxTemplateData(body));
+    doc.render(buildDocxTemplateData(bodyWithClientRequestId));
 
     const buffer = doc.getZip().generate({
       type: "uint8array",
@@ -469,6 +564,11 @@ export async function POST(request: NextRequest) {
     const filename = `หนังสือราชการ_${date}.docx`;
     const encodedFilename = encodeURIComponent(filename);
 
+    console.info("gen-docx-route-end", {
+      submissionMode,
+      createdJobId: createdJobId ?? null,
+      operation
+    });
     return new NextResponse(Buffer.from(buffer), {
       status: 200,
       headers: {
