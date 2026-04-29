@@ -1,11 +1,27 @@
 -- Harden generated_docs writes for RLS-safe inserts from authenticated users.
 
-alter table if exists public.generated_docs
-  alter column properties set default '{}'::jsonb;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'generated_docs'
+      and column_name = 'properties'
+  ) then
+    execute $stmt$
+      alter table public.generated_docs
+      alter column properties set default '{}'::jsonb
+    $stmt$;
 
-update public.generated_docs
-set properties = '{}'::jsonb
-where properties is null;
+    execute $stmt$
+      update public.generated_docs
+      set properties = '{}'::jsonb
+      where properties is null
+    $stmt$;
+  end if;
+end
+$$;
 
 do $$
 begin
