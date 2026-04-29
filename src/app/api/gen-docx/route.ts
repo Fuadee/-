@@ -151,9 +151,25 @@ const buildPersistedData = (body: GeneratePayload, availableColumns: Set<string>
   }
   if (availableColumns.has("status")) writeData.status = nextStatus;
   if (availableColumns.has("payload")) writeData.payload = body;
+  if (availableColumns.has("properties")) writeData.properties = {};
   if (availableColumns.has("updated_at")) writeData.updated_at = new Date().toISOString();
 
   return writeData;
+};
+
+const assignAuthOwnerFields = ({
+  writeData,
+  availableColumns,
+  userId
+}: {
+  writeData: Record<string, unknown>;
+  availableColumns: Set<string>;
+  userId: string | null;
+}) => {
+  if (!userId) return;
+  if (availableColumns.has("user_id")) writeData.user_id = userId;
+  if (availableColumns.has("created_by")) writeData.created_by = userId;
+  if (availableColumns.has("owner_id")) writeData.owner_id = userId;
 };
 
 type UpsertResult = {
@@ -287,9 +303,11 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
     };
   }
 
-  if (availableColumns.has("user_id") && user?.id) {
-    writeData.user_id = user.id;
-  }
+  assignAuthOwnerFields({
+    writeData,
+    availableColumns,
+    userId: user?.id ?? null
+  });
 
   if (Object.keys(writeData).length === 0) {
     return {
@@ -306,7 +324,17 @@ async function upsertJobRecord(body: GeneratePayload, jobId?: string, submission
   }
 
   console.info("gen-docx-create-start", {
-    submissionMode
+    submissionMode,
+    auth: {
+      isAuthenticated: Boolean(user?.id),
+      userId: user?.id ?? null
+    },
+    payload: {
+      hasUserId: "user_id" in writeData,
+      hasCreatedBy: "created_by" in writeData,
+      hasOwnerId: "owner_id" in writeData,
+      hasProperties: "properties" in writeData
+    }
   });
   const { data, error } = await supabase.from(table).insert(writeData).select("*").limit(1);
   if (error) {
