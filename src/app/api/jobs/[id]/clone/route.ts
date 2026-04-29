@@ -124,9 +124,12 @@ const buildCloneWriteData = ({
   );
   assignIfSupported("updated_at", new Date().toISOString());
   assignIfSupported("payload", clonedPayload);
+  assignIfSupported("properties", {});
 
-  if (availableColumns.has("user_id") && userId) {
-    writeData.user_id = userId;
+  if (userId) {
+    assignIfSupported("user_id", userId);
+    assignIfSupported("created_by", userId);
+    assignIfSupported("owner_id", userId);
   }
 
   return writeData;
